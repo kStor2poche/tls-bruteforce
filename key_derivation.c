@@ -4,44 +4,20 @@
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
-/*
-prf(ssl_session, &ssl_session->pre_master_secret, "extended master secret",
-                     &handshake_hashed_data,
-                     NULL, &ssl_session->master_secret,
-                     SSL_MASTER_SECRET_LENGTH)
-
-prf(SslDecryptSession *ssl, StringInfo *secret, const char *usage,
-    StringInfo *rnd1, StringInfo *rnd2, StringInfo *out, unsigned out_len)
-
-tls12_prf(GCRY_MD_SHA384, secret, usage, rnd1, rnd2,
-                             out, out_len)
-
-tls12_prf(int md, StringInfo* secret, const char* usage,
-          StringInfo* rnd1, StringInfo* rnd2, StringInfo* out, unsigned out_len)
-
-tls_hash(secret, &label_seed, md, out, out_len)
-
-tls_hash(StringInfo *secret, StringInfo *seed, int md,
-         StringInfo *out, unsigned out_len)
-
-*/
-
+typedef struct _keyring_material {
+    bytearray key;
+    bytearray mac;
+    bytearray iv;
+} keyring_material;
 
 // Pseudo-Random Function (TLS 1.2) 
-// label should usually be "key expansion" in our context
 // Examples are from TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-int prf(bytearray secret, bytearray s_rand, bytearray c_rand, bytearray out) {
+int prf(bytearray secret, bytearray s_rand, bytearray c_rand, bytearray out, int len_needed) {
     gcry_md_hd_t    *md;
     gcry_error_t    err;
     const char      *err_str, *err_src;
     bytearray       seed, A, tmp;
     int             len;
-
-    // mac_len, key_len and iv_len are the length of the used ciphers
-    // key_len is the 128 in AES_128
-    // TODO : Generalize
-
-    int len_needed  = 256*2 + 128*2 + 128*2; 
 
     // Concatenation of the label and the randoms
     seed.len = 13 + c_rand.len + s_rand.len;
@@ -107,45 +83,54 @@ int prf(bytearray secret, bytearray s_rand, bytearray c_rand, bytearray out) {
     return 0;
 }
 
-int main(int argc, char **argv) {
-    // TLS 1.2 : https://datatracker.ietf.org/doc/html/rfc5246#section-6.3
-    // Recover MAC_key, key
-    // For the AEAD ciphers, also recover IV
-
-    // Requires "SecurityParameters" for length
-
-    bytearray   secret, c_rand, s_rand, out, mac, key, iv;
-    int         err;
-    
-    
+// TLS 1.2 : https://datatracker.ietf.org/doc/html/rfc5246#section-6.3
+// Recover MAC_key, key
+// For the AEAD ciphers, also recover IV
+keyring_material key_derivation() {
+    bytearray           secret, c_rand, s_rand, out, mac, key, iv;
+    int                 key_len, iv_len, mac_len, err, len_needed;
+    unsigned char       *ptr;
 
     // version = TLS 1.2
     // client_random = f77598b32f033d64c2707a6c1bba1f2658b6fb7b88447ba9b00babe3ce87b1e4
     // server_random = 6788d52f6c61e0c47dadb0e627f6974b7045edf1ea9d9b62444f574e47524401
     // cipher_suite = TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
     // packet = 26bc34d7c7b75fccf4ffb4efa4e775a96822778c5727ecb27470bc46059f2d60a4fe38b34cb6fd82690b583bbd83b281f151ac3f887690
+    // master_secret 64b207df340f391926f98646089406d15a989daa21c7f6e8df83326f190ae32f93ed91254b6a2cd0bd1bf3aee05c4597
 
+    c_rand = hexstr_to_bytearray("f77598b32f033d64c2707a6c1bba1f2658b6fb7b88447ba9b00babe3ce87b1e4");
+    s_rand = hexstr_to_bytearray("6788d52f6c61e0c47dadb0e627f6974b7045edf1ea9d9b62444f574e47524401");
+    secret = hexstr_to_bytearray("64b207df340f391926f98646089406d15a989daa21c7f6e8df83326f190ae32f93ed91254b6a2cd0bd1bf3aee05c4597");
 
-    // Here, random is maybe an error, maybe we need both client and server random. From handshake ??
-    err = prf(secret, c_rand, s_rand, out);
-    if (err != 0) {
-        printf("uh oh\n");
-        return 1;
-    }
+    // mac_len, key_len and iv_len are the length of the used ciphers
+    // key_len is the 128 in AES_128
+    // TODO : Generalize sizes
+    key_len = 128;
 
-    // TODO : Generalize size
-    // We découpe toute la donnée qui a été générée pour en extraire les infos
+    // if CBC
+        //iv_len = gcry_cipher_get_algo_blklen
+    // if GCM || CCM || CCM_8
+        iv_len = 4;
+    // if POLY1305
+        //iv_len = 12
 
-    // *2 because we're only interested in the client ones
+    // MD5=16, SHA1=20, SHA256=32, SHA384=48, SM3=32
+    mac_len = 32;
 
-    // if "stream" or "CBC" (non-AEAD)
-    mac = out.data;
-    out += 2*128;
+    len_needed  = key_len*2 + iv_len*2 + mac_len*2;
 
-    key = out;
-    out += 2*256;
+    prf(secret, c_rand, s_rand, out, len_needed);
 
-    //if AEAD, need IV
-    iv = out;
+    ptr = out.data;
 
+    // if STREAM || CBC
+        //mac = (bytearray){ptr, mac_len};
+        //ptr+=mac_len*2
+    key = (bytearray){ptr, key_len};
+    ptr+= key_len*2;
+    
+    // if iv_len > 0
+        iv = (bytearray){ptr, iv_len};
+
+    return (keyring_material){key, mac, iv};
 }
