@@ -9,13 +9,19 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
+bytearray: bytearray.c
+	${CC} ${CFLAGS} -c $< -o bytearray.o
+
+key_derivation: key_derivation.c bytearray.h
+	${CC} ${CFLAGS} -c $< -o key_derivation.o
+
 tls_decrypt: tls_decrypt.c
 	${CC} ${CFLAGS} -c $< -o tls_decrypt.o
 
-main: main.c tls_decrypt.h
+main: main.c tls_decrypt.h bytearray.h
 	${CC} ${CFLAGS} -c $< -o main.o
 
-build: main.o tls_decrypt.o
+build: main.o bytearray.o tls_decrypt.o key_derivation.o
 	${CC} ${CFLAGS} -l${LIBS} $^ -o tls-bf
 
 run: build

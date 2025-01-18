@@ -1,37 +1,38 @@
 #include <gcrypt.h>
 #include <string.h>
 #include "bytearray.h"
+#include "key_derivation.h"
 
+#define TCP_MAX_SIZE 65535
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
-
-typedef struct _keyring_material {
-    bytearray key;
-    bytearray mac;
-    bytearray iv;
-} keyring_material;
 
 // Pseudo-Random Function (TLS 1.2) 
 // Examples are from TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-int prf(bytearray secret, bytearray s_rand, bytearray c_rand, bytearray out, int len_needed) {
-    gcry_md_hd_t    *md;
+static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearray *out, int len_needed) {
+    gcry_md_hd_t    md;
     gcry_error_t    err;
     const char      *err_str, *err_src;
     bytearray       seed, A, tmp;
     int             len;
 
+    // allocations 
+    // TODO: proper dynamic strings ? Or at least proper sizing ?
+    tmp.data = malloc(TCP_MAX_SIZE);
+    out->data = malloc(TCP_MAX_SIZE);
+
     // Concatenation of the label and the randoms
-    seed.len = 13 + c_rand.len + s_rand.len;
+    seed.len = 13 + c_rand->len + s_rand->len;
     seed.data = malloc(seed.len);
     memcpy(seed.data, "key expansion", 13);
-    memcpy(seed.data+13, s_rand.data, s_rand.len);
-    memcpy(seed.data+13+s_rand.len, c_rand.data, c_rand.len);
+    memcpy(seed.data+13, s_rand->data, s_rand->len);
+    memcpy(seed.data+13+s_rand->len, c_rand->data, c_rand->len);
 
     // algo is the hashing algorithm that is gonna be used
     // GCRY_MD_SHA384, GCRY_MD_SHA256, GCRY_MD_SM3
     // obtained from the packet ciphersuite last item
     // TODO : Generalize
 
-    err = gcry_md_open(md,GCRY_MD_SHA256, GCRY_MD_FLAG_HMAC);
+    err = gcry_md_open(&md,GCRY_MD_SHA256, GCRY_MD_FLAG_HMAC);
     if (err != 0) {
         err_str = gcry_strerror(err);
         err_src = gcry_strsource(err);
@@ -43,42 +44,42 @@ int prf(bytearray secret, bytearray s_rand, bytearray c_rand, bytearray out, int
     A = seed;
     while (len_needed) {
         // A(i) = HMAC_hash(secret, A(i-1))
-        err = gcry_md_setkey(*md, secret.data, secret.len);
+        err = gcry_md_setkey(md, secret->data, secret->len);
         if (err != 0) {
             err_str = gcry_strerror(err);
             err_src = gcry_strsource(err);
             printf("prf: gcry_md_setkey failed %s/%s", err_str, err_src);
             return 1;
         }
-        gcry_md_write(*md, A.data, A.len);
+        gcry_md_write(md, A.data, A.len);
         //TODO : Generalize
         A.len = gcry_md_get_algo_dlen(GCRY_MD_SHA256);
-        memcpy(A.data, gcry_md_read(*md, GCRY_MD_SHA256), A.len);
-        gcry_md_reset(*md);
+        memcpy(A.data, gcry_md_read(md, GCRY_MD_SHA256), A.len);
+        gcry_md_reset(md);
 
         // HMAC_hash(secret, A(i) + seed)
-        err = gcry_md_setkey(*md, secret.data, secret.len);
+        err = gcry_md_setkey(md, secret->data, secret->len);
         if (err != 0) {
             err_str = gcry_strerror(err);
             err_src = gcry_strsource(err);
             printf("prf: gcry_md_setkey failed %s/%s", err_str, err_src);
             return 1;
         }
-        gcry_md_write(*md, A.data, A.len);
-        gcry_md_write(*md, seed.data, seed.len);
+        gcry_md_write(md, A.data, A.len);
+        gcry_md_write(md, seed.data, seed.len);
         tmp.len = gcry_md_get_algo_dlen(GCRY_MD_SHA256);
-        memcpy(tmp.data, gcry_md_read(*md, GCRY_MD_SHA256), tmp.len);
-        gcry_md_reset(*md);
+        memcpy(tmp.data, gcry_md_read(md, GCRY_MD_SHA256), tmp.len);
+        gcry_md_reset(md);
 
         len = MIN(len_needed, tmp.len);
-        memcpy(out.data, tmp.data, len);
-        out.data += len;
-        out.len += len;
+        memcpy(out->data, tmp.data, len);
+        out->data += len;
+        out->len += len;
         len_needed -= len;
     }
 
-    gcry_md_close(*md);
-    out.data -= out.len;
+    gcry_md_close(md);
+    out->data -= out->len;
 
     return 0;
 }
@@ -119,7 +120,7 @@ keyring_material key_derivation() {
 
     len_needed  = key_len*2 + iv_len*2 + mac_len*2;
 
-    prf(secret, c_rand, s_rand, out, len_needed);
+    prf(&secret, &c_rand, &s_rand, &out, len_needed);
 
     ptr = out.data;
 
