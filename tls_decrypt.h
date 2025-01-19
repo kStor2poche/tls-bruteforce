@@ -2,7 +2,9 @@
 #define TLS_DECRYPT_H
 
 #include <gcrypt.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 /* define from epan/proto.h */
 
@@ -81,6 +83,17 @@ static inline void phton16(uint8_t *p, uint16_t v)
     p[0] = (uint8_t)(v >> 8);
     p[1] = (uint8_t)(v >> 0);
 }
+
+/* helper stub */
+void inline ssl_print_data(const char *header, uint8_t *bytes, size_t byte_len) {
+    printf("%s: 0x", header);
+    for (size_t i = 0; i < byte_len; i++) {
+        printf("%02x", bytes[i]);
+    }
+    puts("");
+}
+
+#define G_STRFUNC __func__
 
 int ssl_cipher_init(
         gcry_cipher_hd_t *cipher,
