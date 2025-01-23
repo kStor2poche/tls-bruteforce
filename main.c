@@ -43,13 +43,16 @@ int main(int argc, char **argv) {
 
     keyring_material test = key_derivation();
 
+    print_bytearray(test.key);
+    print_bytearray(test.iv);
+
     gcry_cipher_hd_t cipher;
     if (ssl_cipher_init(&cipher, cipher_algo, test.key.data, test.iv.data, mode) < 0) {
         fputs("ssl_cipher failed. See message(s) above for context.\n", stderr);
         exit(5);
     };
 
-    bytearray packet = hexstr_to_bytearray("26bc34d7c7b75fccf4ffb4efa4e775a96822778c5727ecb27470bc46059f2d60a4fe38b34cb6fd82690b583bbd83b281f151ac3f887690");
+    bytearray packet = hexstr_to_bytearray("00000000000000017d9db8ea6bf0370f8c45e947047d22d6758c6b6247f059daa9c65147afa19106635c06cdbd4a696f5c7b49b08271a46146aba3f5248545b3");
     // for next tests
     // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
 

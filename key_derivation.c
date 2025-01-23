@@ -23,8 +23,11 @@ static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearra
     seed.len = 13 + c_rand->len + s_rand->len;
     seed.data = malloc(seed.len);
     memcpy(seed.data, "key expansion", 13);
-    memcpy(seed.data+13, s_rand->data, s_rand->len);
-    memcpy(seed.data+13+s_rand->len, c_rand->data, c_rand->len);
+    memcpy(seed.data+13, c_rand->data, c_rand->len);
+    memcpy(seed.data+13+c_rand->len, s_rand->data, s_rand->len);
+    
+    print_bytearray(seed);
+    print_bytearray(*secret);
 
     // algo is the hashing algorithm that is gonna be used
     // GCRY_MD_SHA384, GCRY_MD_SHA256, GCRY_MD_SM3
@@ -98,15 +101,15 @@ keyring_material key_derivation() {
     // packet = 26bc34d7c7b75fccf4ffb4efa4e775a96822778c5727ecb27470bc46059f2d60a4fe38b34cb6fd82690b583bbd83b281f151ac3f887690
     // master_secret 64b207df340f391926f98646089406d15a989daa21c7f6e8df83326f190ae32f93ed91254b6a2cd0bd1bf3aee05c4597
 
-    c_rand = hexstr_to_bytearray("f77598b32f033d64c2707a6c1bba1f2658b6fb7b88447ba9b00babe3ce87b1e4");
-    s_rand = hexstr_to_bytearray("6788d52f6c61e0c47dadb0e627f6974b7045edf1ea9d9b62444f574e47524401");
-    secret = hexstr_to_bytearray("64b207df340f391926f98646089406d15a989daa21c7f6e8df83326f190ae32f93ed91254b6a2cd0bd1bf3aee05c4597");
+    c_rand = hexstr_to_bytearray("fa04f06c223a813f4fb5381b0db7e9ea217c4f86917fa4053dcb10f6185017fa");
+    s_rand = hexstr_to_bytearray("67928cc6ced13aae5c205a91da7d825a460df7bdef15ea65444f574e47524401");
+    secret = hexstr_to_bytearray("07a6efff7a2dd8be8e114f2aaca6d448e02ceaf501b5d76c10bd28efffaae3b51d621c64aff5dbd48e4a376a3dc2a99b");
     out = (bytearray){malloc(TCP_MAX_SIZE), 0};
 
     // mac_len, key_len and iv_len are the length of the used ciphers
     // key_len is the 128 in AES_128
     // TODO : Generalize sizes
-    key_len = 128;
+    key_len = 16;
 
     // if CBC
         //iv_len = gcry_cipher_get_algo_blklen

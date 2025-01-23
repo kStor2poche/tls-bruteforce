@@ -15,7 +15,8 @@ bytearray hexstr_to_bytearray(const char* hexstr)
     return bytes;
 }
 
-void print_bytearray(bytearray b) {
+void print_bytearray_sub(char *name, bytearray b) {
+    printf("%s: .len = %lu, .data = ", name, b.len);
     for (size_t i = 0; i<b.len; i++) {
         printf("%02x", b.data[i]);
     }
