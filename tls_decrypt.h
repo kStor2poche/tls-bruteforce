@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 /* define from epan/proto.h */
 
@@ -51,6 +52,17 @@ typedef enum {
     SSL_ID_DTLS13_ACK              = 0x1A,
 } ContentType;
 
+/* SSL Cipher Suite modes */
+typedef enum {
+    MODE_STREAM,    /* GenericStreamCipher */
+    MODE_CBC,       /* GenericBlockCipher */
+    MODE_GCM,       /* GenericAEADCipher */
+    MODE_CCM,       /* AEAD_AES_{128,256}_CCM with 16 byte auth tag */
+    MODE_CCM_8,     /* AEAD_AES_{128,256}_CCM with 8 byte auth tag */
+    MODE_POLY1305,  /* AEAD_CHACHA20_POLY1305 with 16 byte auth tag (RFC 7905) */
+    MODE_ECB, /* ECB: used to perform record seq number encryption in DTLSv1.3 */
+} ssl_cipher_mode_t;
+
 /* Explicit and implicit nonce length (RFC 5116 - Section 3.2.1) */
 #define IMPLICIT_NONCE_LEN  4
 #define EXPLICIT_NONCE_LEN  8
@@ -85,15 +97,12 @@ static inline void phton16(uint8_t *p, uint16_t v)
 }
 
 /* helper stub */
-void inline ssl_print_data(const char *header, uint8_t *bytes, size_t byte_len) {
-    printf("%s: 0x", header);
-    for (size_t i = 0; i < byte_len; i++) {
-        printf("%02x", bytes[i]);
-    }
-    puts("");
-}
+void ssl_print_data(const char *header, uint8_t *bytes, size_t byte_len);
 
 #define G_STRFUNC __func__
+
+/* our stuff */
+#include "bytearray.h"
 
 int ssl_cipher_init(
         gcry_cipher_hd_t *cipher,
@@ -108,6 +117,15 @@ int ssl_cipher_decrypt(
         int outl,
         const unsigned char * in,
         int inl
+);
+bool tls_decrypt_aead_record(
+        gcry_cipher_hd_t *cipher,
+        ssl_cipher_mode_t mode,
+        uint8_t ct, uint16_t record_version,
+        bool ignore_mac_failed,
+        const unsigned char *in, uint16_t inl,
+        const unsigned char *cid, uint8_t cidl,
+        bytearray *out_str
 );
 int algo_from_str(char *algo_str);
 int mode_from_str(char *mode_str);

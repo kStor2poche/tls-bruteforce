@@ -13,3 +13,7 @@ bytearray hexstr_to_bytearray(const char* hexstr)
         bytes.data[j] = (hexstr[i] % 32 + 9) % 25 * 16 + (hexstr[i+1] % 32 + 9) % 25;
     return bytes;
 }
+
+bytearray new_bytearray(unsigned char *data, size_t len) {
+    return (bytearray){.data= data, .len= len};
+}

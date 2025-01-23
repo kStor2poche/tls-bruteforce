@@ -14,21 +14,11 @@
 
 #include "tls_decrypt.h"
 #include "bytearray.h"
+#include <stdio.h>
 #include <stdint.h>
 #include <gcrypt.h>
 #include <string.h>
 #include <stdbool.h>
-
-/* SSL Cipher Suite modes */
-typedef enum {
-    MODE_STREAM,    /* GenericStreamCipher */
-    MODE_CBC,       /* GenericBlockCipher */
-    MODE_GCM,       /* GenericAEADCipher */
-    MODE_CCM,       /* AEAD_AES_{128,256}_CCM with 16 byte auth tag */
-    MODE_CCM_8,     /* AEAD_AES_{128,256}_CCM with 8 byte auth tag */
-    MODE_POLY1305,  /* AEAD_CHACHA20_POLY1305 with 16 byte auth tag (RFC 7905) */
-    MODE_ECB, /* ECB: used to perform record seq number encryption in DTLSv1.3 */
-} ssl_cipher_mode_t;
 
 typedef struct {
     int value;
@@ -378,16 +368,22 @@ int ssl_cipher_init(
         return 0;
     }
     err = gcry_cipher_open(cipher, algo, gcry_modes[mode], 0);
-    if (err !=0)
+    if (err !=0) {
+        fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
         return  -1;
+    }
     err = gcry_cipher_setkey(*(cipher), sk, gcry_cipher_get_algo_keylen (algo));
-    if (err != 0)
+    if (err != 0) {
+        fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
         return -1;
+    }
     /* AEAD cipher suites will set the nonce later. */
     if (mode == MODE_CBC) {
         err = gcry_cipher_setiv(*(cipher), iv, gcry_cipher_get_algo_blklen(algo));
-        if (err != 0)
+        if (err != 0) {
+            fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
             return -1;
+        }
     }
     return 0;
 }
@@ -416,14 +412,14 @@ typedef struct _SslDecoder {
     uint16_t epoch;
 } SslDecoder;
 
-static bool tls_decrypt_aead_record(
+bool tls_decrypt_aead_record(
         gcry_cipher_hd_t *cipher,
         ssl_cipher_mode_t mode,
         uint8_t ct, uint16_t record_version,
         bool ignore_mac_failed,
         const unsigned char *in, uint16_t inl,
         const unsigned char *cid, uint8_t cidl,
-        bytearray *out_str, unsigned *outl)
+        bytearray *out_str)
 {
     /* RFC 5246 (TLS 1.2) 6.2.3.3 defines the TLSCipherText.fragment as:
      * GenericAEADCipher: { nonce_explicit, [content] }
@@ -514,7 +510,9 @@ static bool tls_decrypt_aead_record(
     }
 
     /* Set nonce and additional authentication data */
-    gcry_cipher_reset(cipher);
+    printf("cipher is %p\n", cipher);
+    printf("*cipher is %p\n", *cipher);
+    gcry_cipher_reset(*cipher);
     ssl_print_data("nonce", nonce, 12);
     err = gcry_cipher_setiv(decoder->evp, nonce, 12);
     if (err) {
@@ -624,7 +622,7 @@ static bool tls_decrypt_aead_record(
     }
 
     ssl_print_data("Plaintext", out_str->data, ciphertext_len);
-    *outl = ciphertext_len;
+    out_str->len = ciphertext_len;
     return true;
 }
 
@@ -657,3 +655,12 @@ int mode_from_str(char *mode_str) {
     }
     return -1;
 }
+
+void ssl_print_data(const char *header, uint8_t *bytes, size_t byte_len) {
+  printf("%s: 0x", header);
+  for (size_t i = 0; i < byte_len; i++) {
+    printf("%02x", bytes[i]);
+  }
+  puts("");
+}
+

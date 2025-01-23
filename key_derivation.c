@@ -89,7 +89,7 @@ static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearra
 // For the AEAD ciphers, also recover IV
 keyring_material key_derivation() {
     bytearray           secret, c_rand, s_rand, out, mac, key, iv;
-    int                 key_len, iv_len, mac_len, err, len_needed;
+    int                 key_len, iv_len, mac_len, len_needed;
     unsigned char       *ptr;
 
     // version = TLS 1.2
@@ -128,10 +128,11 @@ keyring_material key_derivation() {
         //mac = (bytearray){ptr, mac_len};
         //ptr+=mac_len*2
     key = (bytearray){ptr, key_len};
+    printf("key data : %p -> %02x\n", key.data, *key.data);
     ptr+= key_len*2;
     
     // if iv_len > 0
         iv = (bytearray){ptr, iv_len};
 
-    return (keyring_material){key, mac, iv};
+    return (keyring_material){key, (bytearray){.data=NULL, .len=0}, iv};
 }

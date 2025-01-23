@@ -25,6 +25,8 @@ int main(int argc, char **argv) {
         fputs("Unrecognised cipher suite", stderr);
         exit(3);
     }
+
+    int cipher_algo = GCRY_CIPHER_AES128;
     
     /*
     char *mode_str = argv[4];
@@ -42,12 +44,17 @@ int main(int argc, char **argv) {
     keyring_material test = key_derivation();
 
     gcry_cipher_hd_t cipher;
-    ssl_cipher_init(&cipher, cipher_suite, test.key.data, NULL, mode);
-
-    unsigned char out[TCP_MAX_SIZE]; // max TCP size
+    if (ssl_cipher_init(&cipher, cipher_algo, test.key.data, test.iv.data, mode) < 0) {
+        fputs("ssl_cipher failed. See message(s) above for context.\n", stderr);
+        exit(5);
+    };
 
     bytearray packet = hexstr_to_bytearray("26bc34d7c7b75fccf4ffb4efa4e775a96822778c5727ecb27470bc46059f2d60a4fe38b34cb6fd82690b583bbd83b281f151ac3f887690");
-    ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
+    // for next tests
+    // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
 
-    printf("Just cooked this, hope it's alright :\n%s\n", out);
+    bytearray *out = &(bytearray){.data = malloc(TCP_MAX_SIZE), .len = TCP_MAX_SIZE};
+    tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x301, false, packet.data, packet.len, NULL, 0, out);
+
+    printf("Just cooked this, hope it's alright :\n%s\n", (char*)out->data);
 }
