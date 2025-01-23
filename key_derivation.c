@@ -18,7 +18,6 @@ static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearra
     // allocations 
     // TODO: proper dynamic strings ? Or at least proper sizing ?
     tmp.data = malloc(TCP_MAX_SIZE);
-    out->data = malloc(TCP_MAX_SIZE);
 
     // Concatenation of the label and the randoms
     seed.len = 13 + c_rand->len + s_rand->len;
@@ -102,6 +101,7 @@ keyring_material key_derivation() {
     c_rand = hexstr_to_bytearray("f77598b32f033d64c2707a6c1bba1f2658b6fb7b88447ba9b00babe3ce87b1e4");
     s_rand = hexstr_to_bytearray("6788d52f6c61e0c47dadb0e627f6974b7045edf1ea9d9b62444f574e47524401");
     secret = hexstr_to_bytearray("64b207df340f391926f98646089406d15a989daa21c7f6e8df83326f190ae32f93ed91254b6a2cd0bd1bf3aee05c4597");
+    out = (bytearray){malloc(TCP_MAX_SIZE), 0};
 
     // mac_len, key_len and iv_len are the length of the used ciphers
     // key_len is the 128 in AES_128

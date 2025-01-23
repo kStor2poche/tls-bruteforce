@@ -1,3 +1,6 @@
 [compiled executables]
 *.o
 tls-bf
+
+[gdb history from pwndbg]
+.gdb_history
