@@ -43,11 +43,11 @@ int main(int argc, char **argv) {
 
     keyring_material test = key_derivation();
 
-    print_bytearray(test.key);
-    print_bytearray(test.iv);
+    print_bytearray(test.skey);
+    print_bytearray(test.siv);
 
     gcry_cipher_hd_t cipher;
-    if (ssl_cipher_init(&cipher, cipher_algo, test.key.data, test.iv.data, mode) < 0) {
+    if (ssl_cipher_init(&cipher, cipher_algo, test.skey.data, test.siv.data, mode) < 0) {
         fputs("ssl_cipher failed. See message(s) above for context.\n", stderr);
         exit(5);
     };
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
 
     bytearray *out = &(bytearray){.data = malloc(TCP_MAX_SIZE), .len = TCP_MAX_SIZE};
-    if (!tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x301, test.iv, false, packet.data, packet.len, NULL, 0, out)) {
+    if (!tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x301, test.siv, true, packet.data, packet.len, NULL, 0, out)) {
         fputs("failure...\n", stderr);
     };
 
