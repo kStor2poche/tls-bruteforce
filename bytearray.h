@@ -7,7 +7,7 @@
 
 typedef struct _bytearray{
    unsigned char *data;
-   int len;
+   size_t len;
 } bytearray;
 
 // https://gist.github.com/xsleonard/7341172

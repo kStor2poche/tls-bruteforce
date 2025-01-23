@@ -416,6 +416,7 @@ bool tls_decrypt_aead_record(
         gcry_cipher_hd_t *cipher,
         ssl_cipher_mode_t mode,
         uint8_t ct, uint16_t record_version,
+        bytearray iv,
         bool ignore_mac_failed,
         const unsigned char *in, uint16_t inl,
         const unsigned char *cid, uint8_t cidl,
@@ -461,8 +462,7 @@ bool tls_decrypt_aead_record(
     }
 
     /* Parse input into explicit nonce (TLS 1.2 only), ciphertext and tag. */
-    // FIXME: re-support this suite
-    /*if (is_v12 && cipher_mode != MODE_POLY1305) {
+    if (is_v12 && cipher_mode != MODE_POLY1305) {
         if (inl < EXPLICIT_NONCE_LEN + auth_tag_len) {
             printf("input %d is too small for explicit nonce %d and auth tag %d\n",
                     inl, EXPLICIT_NONCE_LEN, auth_tag_len);
@@ -483,20 +483,19 @@ bool tls_decrypt_aead_record(
         return false;
     }
     auth_tag_wire = ciphertext + ciphertext_len;
-    */
 
     /*
      * Nonce construction is version-specific. Note that AEAD_CHACHA20_POLY1305
      * (RFC 7905) uses a nonce construction similar to TLS 1.3.
      */
     if (is_v12 && cipher_mode != MODE_POLY1305) {
-        // FIXME: same here
-        //DISSECTOR_ASSERT(decoder->write_iv.data_len == IMPLICIT_NONCE_LEN);
+        DISSECTOR_ASSERT(iv.len == IMPLICIT_NONCE_LEN);
         ///* Implicit (4) and explicit (8) part of nonce. */
-        //memcpy(nonce, decoder->write_iv.data, IMPLICIT_NONCE_LEN);
-        //memcpy(nonce + IMPLICIT_NONCE_LEN, explicit_nonce, EXPLICIT_NONCE_LEN);
+        memcpy(nonce, iv.data, IMPLICIT_NONCE_LEN);
+        memcpy(nonce + IMPLICIT_NONCE_LEN, explicit_nonce, EXPLICIT_NONCE_LEN);
 
     } else if (version == TLSV1DOT3_VERSION || version == DTLSV1DOT3_VERSION ||  cipher_mode == MODE_POLY1305) {
+        exit(9);
         /*
          * Technically the nonce length must be at least 8 bytes, but for
          * AES-GCM, AES-CCM and Poly1305-ChaCha20 the nonce length is exact 12.
@@ -512,10 +511,14 @@ bool tls_decrypt_aead_record(
     /* Set nonce and additional authentication data */
     printf("cipher is %p\n", cipher);
     printf("*cipher is %p\n", *cipher);
-    gcry_cipher_reset(*cipher);
+    err = gcry_cipher_reset(*cipher);
+    if (err != 0) {
+        fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
+        return -1;
+    }
     ssl_print_data("nonce", nonce, 12);
     err = gcry_cipher_setiv(decoder->evp, nonce, 12);
-    if (err) {
+    if (err != 0) {
         printf("%s failed to set nonce: %s\n", G_STRFUNC, gcry_strerror(err));
         return false;
     }
@@ -561,6 +564,7 @@ bool tls_decrypt_aead_record(
         // FIXME: not handling this for now
         //aad_len = decoder->dtls13_aad.data_len;
         //aad = decoder->dtls13_aad.data;
+        exit(10);
     } else if (draft_version >= 25 || draft_version == 0) {
         aad_len = 5;
         aad = malloc(aad_len);
@@ -574,6 +578,10 @@ bool tls_decrypt_aead_record(
         uint64_t lengths[3] = { ciphertext_len, aad_len, auth_tag_len };
 
         gcry_cipher_ctl(decoder->evp, GCRYCTL_SET_CCM_LENGTHS, lengths, sizeof(lengths));
+        if (err != 0) {
+            fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
+            return -1;
+        }
     }
 
     if (aad && aad_len > 0) {

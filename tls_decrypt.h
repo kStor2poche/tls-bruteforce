@@ -122,6 +122,7 @@ bool tls_decrypt_aead_record(
         gcry_cipher_hd_t *cipher,
         ssl_cipher_mode_t mode,
         uint8_t ct, uint16_t record_version,
+        bytearray iv,
         bool ignore_mac_failed,
         const unsigned char *in, uint16_t inl,
         const unsigned char *cid, uint8_t cidl,

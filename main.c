@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
 
     bytearray *out = &(bytearray){.data = malloc(TCP_MAX_SIZE), .len = TCP_MAX_SIZE};
-    tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x301, false, packet.data, packet.len, NULL, 0, out);
+    tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x301, test.iv, false, packet.data, packet.len, NULL, 0, out);
 
     printf("Just cooked this, hope it's alright :\n%s\n", (char*)out->data);
 }
