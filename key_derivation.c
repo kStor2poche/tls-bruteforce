@@ -91,7 +91,7 @@ static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearra
 // Recover MAC_key, key
 // For the AEAD ciphers, also recover IV
 keyring_material key_derivation() {
-    bytearray           secret, c_rand, s_rand, out, mac, key, iv;
+    bytearray           secret, c_rand, s_rand, out, cmac, smac, ckey, skey, civ, siv;
     int                 key_len, iv_len, mac_len, len_needed;
     unsigned char       *ptr;
 
@@ -129,14 +129,19 @@ keyring_material key_derivation() {
     ptr = out.data;
 
     // if STREAM || CBC
-        //mac = (bytearray){ptr, mac_len};
-        //ptr+=mac_len*2
-    key = (bytearray){ptr, key_len};
-    printf("key data : %p -> %02x\n", key.data, *key.data);
-    ptr+= key_len*2;
+        //cmac = (bytearray){ptr, mac_len};
+        //ptr+=mac_len;
+        //smac = (bytearray){ptr, mac_len};
+        //ptr+=mac_len;
+    ckey = (bytearray){ptr, key_len};
+    ptr+= key_len;
+    skey = (bytearray){ptr, key_len};
+    ptr+= key_len;
     
     // if iv_len > 0
-        iv = (bytearray){ptr, iv_len};
+        civ = (bytearray){ptr, iv_len};
+        ptr += iv_len;
+        siv = (bytearray){ptr, iv_len};
 
-    return (keyring_material){key, (bytearray){.data=NULL, .len=0}, iv};
+    return (keyring_material){ckey, skey, (bytearray){.data=NULL, .len=0}, (bytearray){.data=NULL, .len=0}, civ, siv};
 }

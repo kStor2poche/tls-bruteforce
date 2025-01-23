@@ -3,9 +3,12 @@
 
 #include "bytearray.h"
 typedef struct _keyring_material {
-    bytearray key;
-    bytearray mac;
-    bytearray iv;
+    bytearray ckey;
+    bytearray skey;
+    bytearray cmac;
+    bytearray smac;
+    bytearray civ;
+    bytearray siv;
 } keyring_material;
 
 keyring_material key_derivation();
