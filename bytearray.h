@@ -13,4 +13,6 @@ typedef struct _bytearray{
 // https://gist.github.com/xsleonard/7341172
 bytearray hexstr_to_bytearray(const char* hexstr);
 
+void print_barray(bytearray b);
+
 #endif

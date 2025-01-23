@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "bytearray.h"
@@ -14,6 +15,9 @@ bytearray hexstr_to_bytearray(const char* hexstr)
     return bytes;
 }
 
-bytearray new_bytearray(unsigned char *data, size_t len) {
-    return (bytearray){.data= data, .len= len};
+void print_bytearray(bytearray b) {
+    for (size_t i = 0; i<b.len; i++) {
+        printf("%02x", b.data[i]);
+    }
+    puts("");
 }
