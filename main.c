@@ -57,9 +57,10 @@ int main(int argc, char **argv) {
     // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
 
     bytearray *out = &(bytearray){.data = malloc(TCP_MAX_SIZE), .len = TCP_MAX_SIZE};
-    if (!tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x301, test.siv, true, packet.data, packet.len, NULL, 0, out)) {
+    if (!tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x303, test.siv, true, packet.data, packet.len, NULL, 0, out)) {
         fputs("failure...\n", stderr);
+        exit(6);
     };
 
-    printf("Just cooked this, hope it's alright :\n%s\n", (char*)out->data);
+    puts("Just cooked the above !");
 }

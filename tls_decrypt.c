@@ -420,7 +420,7 @@ bool tls_decrypt_aead_record(
         bool ignore_mac_failed,
         const unsigned char *in, uint16_t inl,
         const unsigned char *cid, uint8_t cidl,
-        bytearray *out_str)
+        bytearray *out)
 {
     /* RFC 5246 (TLS 1.2) 6.2.3.3 defines the TLSCipherText.fragment as:
      * GenericAEADCipher: { nonce_explicit, [content] }
@@ -445,7 +445,7 @@ bool tls_decrypt_aead_record(
     unsigned        aad_len = 0;
     
     // FIXME: PLACEHOLDER/DUMMY decoder
-    SslDecoder *decoder = &(SslDecoder){.seq = 0, .epoch = 0, .evp = *cipher};
+    SslDecoder *decoder = &(SslDecoder){.seq = 1, .epoch = 0, .evp = *cipher};
 
     switch (cipher_mode) {
     case MODE_GCM:
@@ -509,8 +509,6 @@ bool tls_decrypt_aead_record(
     }
 
     /* Set nonce and additional authentication data */
-    printf("cipher is %p\n", cipher);
-    printf("*cipher is %p\n", *cipher);
     err = gcry_cipher_reset(*cipher);
     if (err != 0) {
         fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
@@ -560,11 +558,12 @@ bool tls_decrypt_aead_record(
         aad[8] = ct;                        /* TLSCompressed.type */
         phton16(aad + 9, record_version);   /* TLSCompressed.version */
         phton16(aad + 11, ciphertext_len);  /* TLSCompressed.length */
+        ssl_print_data("aad", aad, aad_len);
     } else if (version == DTLSV1DOT3_VERSION) {
         // FIXME: not handling this for now
+        exit(10);
         //aad_len = decoder->dtls13_aad.data_len;
         //aad = decoder->dtls13_aad.data;
-        exit(10);
     } else if (draft_version >= 25 || draft_version == 0) {
         aad_len = 5;
         aad = malloc(aad_len);
@@ -594,7 +593,7 @@ bool tls_decrypt_aead_record(
     }
 
     /* Decrypt now that nonce and AAD are set. */
-    err = gcry_cipher_decrypt(decoder->evp, out_str->data, out_str->len, ciphertext, ciphertext_len);
+    err = gcry_cipher_decrypt(decoder->evp, out->data, out->len, ciphertext, ciphertext_len);
     if (err) {
         printf("%s decrypt failed: %s\n", G_STRFUNC, gcry_strerror(err));
         return false;
@@ -629,8 +628,8 @@ bool tls_decrypt_aead_record(
         //decoder->seq++;
     }
 
-    ssl_print_data("Plaintext", out_str->data, ciphertext_len);
-    out_str->len = ciphertext_len;
+    ssl_print_data("Plaintext", out->data, ciphertext_len);
+    out->len = ciphertext_len;
     return true;
 }
 
