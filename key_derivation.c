@@ -12,12 +12,14 @@ static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearra
     gcry_md_hd_t    md;
     gcry_error_t    err;
     const char      *err_str, *err_src;
-    bytearray       seed, A, tmp;
+    bytearray       seed, A, _A, tmp;
     int             len;
 
     // allocations 
     // TODO: proper dynamic strings ? Or at least proper sizing ?
-    tmp.data = malloc(TCP_MAX_SIZE);
+    tmp = (bytearray){malloc(TCP_MAX_SIZE), 0};
+    A = (bytearray){malloc(TCP_MAX_SIZE), 0};
+    _A = (bytearray){malloc(TCP_MAX_SIZE), 0};
 
     // Concatenation of the label and the randoms
     seed.len = 13 + c_rand->len + s_rand->len;
@@ -25,9 +27,6 @@ static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearra
     memcpy(seed.data, "key expansion", 13);
     memcpy(seed.data+13, c_rand->data, c_rand->len);
     memcpy(seed.data+13+c_rand->len, s_rand->data, s_rand->len);
-    
-    print_bytearray(seed);
-    print_bytearray(*secret);
 
     // algo is the hashing algorithm that is gonna be used
     // GCRY_MD_SHA384, GCRY_MD_SHA256, GCRY_MD_SM3
@@ -55,10 +54,12 @@ static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearra
         }
         gcry_md_write(md, A.data, A.len);
         //TODO : Generalize
-        A.len = gcry_md_get_algo_dlen(GCRY_MD_SHA256);
-        memcpy(A.data, gcry_md_read(md, GCRY_MD_SHA256), A.len);
-        gcry_md_reset(md);
+        len = gcry_md_get_algo_dlen(gcry_md_get_algo(md));
+        memcpy(_A.data, gcry_md_read(md, GCRY_MD_SHA256), len);
+        A.len = len;
+        A.data = _A.data;
 
+        gcry_md_reset(md);
         // HMAC_hash(secret, A(i) + seed)
         err = gcry_md_setkey(md, secret->data, secret->len);
         if (err != 0) {
@@ -95,11 +96,11 @@ keyring_material key_derivation() {
     unsigned char       *ptr;
 
     // version = TLS 1.2
-    // client_random = f77598b32f033d64c2707a6c1bba1f2658b6fb7b88447ba9b00babe3ce87b1e4
-    // server_random = 6788d52f6c61e0c47dadb0e627f6974b7045edf1ea9d9b62444f574e47524401
+    // client_random = fa04f06c223a813f4fb5381b0db7e9ea217c4f86917fa4053dcb10f6185017fa
+    // server_random = 67928cc6ced13aae5c205a91da7d825a460df7bdef15ea65444f574e47524401
     // cipher_suite = TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-    // packet = 26bc34d7c7b75fccf4ffb4efa4e775a96822778c5727ecb27470bc46059f2d60a4fe38b34cb6fd82690b583bbd83b281f151ac3f887690
-    // master_secret 64b207df340f391926f98646089406d15a989daa21c7f6e8df83326f190ae32f93ed91254b6a2cd0bd1bf3aee05c4597
+    // packet = 00000000000000017d9db8ea6bf0370f8c45e947047d22d6758c6b6247f059daa9c65147afa19106635c06cdbd4a696f5c7b49b08271a46146aba3f5248545b3
+    // master_secret 07a6efff7a2dd8be8e114f2aaca6d448e02ceaf501b5d76c10bd28efffaae3b51d621c64aff5dbd48e4a376a3dc2a99b
 
     c_rand = hexstr_to_bytearray("fa04f06c223a813f4fb5381b0db7e9ea217c4f86917fa4053dcb10f6185017fa");
     s_rand = hexstr_to_bytearray("67928cc6ced13aae5c205a91da7d825a460df7bdef15ea65444f574e47524401");
