@@ -9,16 +9,16 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-bytearray: bytearray.c
+bytearray: bytearray.c bytearray.h
 	${CC} ${CFLAGS} -c $< -o bytearray.o
 
-key_derivation: key_derivation.c bytearray.h
+key_derivation: key_derivation.c key_derivation.h bytearray.o
 	${CC} ${CFLAGS} -c $< -o key_derivation.o
 
-tls_decrypt: tls_decrypt.c
+tls_decrypt: tls_decrypt.c tls_decrypt.h bytearray.o
 	${CC} ${CFLAGS} -c $< -o tls_decrypt.o
 
-main: main.c tls_decrypt.h bytearray.h
+main: main.c tls_decrypt.o key_derivation.o bytearray.o
 	${CC} ${CFLAGS} -c $< -o main.o
 
 build: main.o bytearray.o tls_decrypt.o key_derivation.o
