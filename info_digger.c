@@ -79,52 +79,54 @@ static void tls_handshake_debug_print(tls_handshake_hdr* handshake) {
     printf("\tVersion: 0x%04x\n", ntohs(handshake->ver));
 }
 
-// TODO: change return type accordingly etc etc ? Or use digger ?
-static void analyze_tls_record(digger* self, tls_record_hdr *record, tls_actor actor) {
-    // In function name, record is singular, but due to TCP reassembly shenanigans,
-    // we might get multiple records in one go
+static void analyze_tls_record(digger* self, bytearray record_bytearray, tls_actor actor) {
     puts("");
+    tls_record_hdr *record = (tls_record_hdr *) record_bytearray.data;
     tls_record_debug_print(record);
-    record->len;
+
+    //TODO: actual analysis and information retrieval
     if (record->content_type == TLS_HANDSHAKE) {
         tls_handshake_hdr *handshake_hdr = (tls_handshake_hdr *)((uint8_t*)record + 5);
         tls_handshake_debug_print(handshake_hdr);
         if (handshake_hdr->msg_type == TLS_HS_SERVER_HELLO) {
         }
     }
+
+    // In the function name, record is singular. However, due to TCP reassembly shenanigans,
+    // we might actually get multiple records in one call.
+    if (record->len + 5 != record_bytearray.len) {
+        // TODO: adavance bytearray first
+        // then
+        // analyze_tls_record(self, record_bytearray, actor);
+    }
 }
 
-// Finds TLS version, algo, server random & first packet from capture (with tcp epoch for hmac ?)
+// Finds TLS version, algo, server random & first packet from capture (& tcp epoch for hmac ?)
 dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
     // variables for TCP app content reassembly
     bytearray last_app_data = (bytearray){.data = NULL, .len = 0};
     uint32_t cur_ack = UINT32_MAX;
     uint32_t last_ack = UINT32_MAX;
-    bool last_reassembled = false;
 
     while (true) {
         int code = dig_next_packet(self);
-        // TODO: switch case-ify ?
         switch (code) {
             case 1:
                 break;
             case PCAP_ERROR:
                 fprintf(stderr, "Error: in %s: %s\n", __func__, pcap_geterr(self->capture));
-                break;
+                return DIG_PCAP_ERR;
             case PCAP_ERROR_BREAK:
-                // TODO: maybe return a CAPTURE_INCOMPLETE-ish return val ?
+                // TODO: maybe return a CAPTURE_INCOMPLETE-ish return val depending on a 
+                // to-be-implemented analysis status return on `analyze_tls_record` ?
                 puts("Info: ran out of packets to dig...");
                 return 1;
-                break;
             case PCAP_ERROR_NOT_ACTIVATED:
                 fprintf(stderr, "Error: in %s: pcap handle missing activation\n", __func__);
-                break;
+                return DIG_PCAP_ERR;
             default:
                 fprintf(stderr, "Error: in %s: unknown libpcap error (%d)\n", __func__, code);
-                break;
-        }
-        if (code != 1) {
-            return DIG_PCAP_ERR;
+                return DIG_PCAP_ERR;
         }
 
         if (self->cur_hdr->len != self->cur_hdr->caplen) {
@@ -132,12 +134,11 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
             return DIG_INCOMPLETE_CAPTURE;
         }
 
-        // TODO: handle potential vlan and more
         const uint8_t *packet_hdr = self->cur_packet + ETHER_HDR_LEN;
         const uint8_t *segment_hdr;
         uint8_t proto;
 
-        // skip if packet isn't ip or ipv6
+        // TODO: handle potential vlan and other possible (common) encapsulations
         switch (ether_type(self)) {
             case ETHERTYPE_IP: // TODO: test & implement some ipv4 defrag ?
                 struct iphdr *ip_hdr = (struct iphdr *)packet_hdr;
@@ -153,7 +154,7 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
                 continue;
         }
 
-        // TODO: handle dtls & quic
+        // TODO: handle dtls & quic, ideally through separate functions if that is possible
         if (proto != IPPROTO_TCP) {
             continue;
         }
@@ -164,6 +165,7 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
             continue;
         }
 
+        // Find out if packet is from client or server, or if there even is a TLS payload
         tls_actor actor = has_tls_actor(tcp_hdr->th_sport, tcp_hdr->th_dport, tls_ports);
         if (actor == NONE) {
             continue;
@@ -174,12 +176,12 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
         cur_ack = tcp_hdr->ack_seq;
 
         if (cur_ack != last_ack) {
-            // time to analyze reassembled packet
+            // time to analyze reassembled packet...
             if (last_app_data.data != NULL) {
-                tls_record_hdr *record = (tls_record_hdr *) last_app_data.data;
-                analyze_tls_record(self, record, actor);
+                analyze_tls_record(self, last_app_data, actor);
             }
 
+            // ...and pave the way for new ones
             void *ret = realloc(last_app_data.data, data_len);
             
             if (ret == NULL) {
@@ -190,7 +192,6 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
 
             memcpy(last_app_data.data, segment_hdr + tcp_hdr_len, data_len);
             last_app_data.len = data_len;
-            //print_bytearray(last_app_data);
         } else {
             void *ret = realloc(last_app_data.data, data_len + last_app_data.len);
 
@@ -202,7 +203,6 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
 
             memcpy(last_app_data.data + last_app_data.len, segment_hdr + tcp_hdr_len, data_len);
             last_app_data.len += data_len;
-            last_reassembled = true;
         }
 
         last_ack = cur_ack;
