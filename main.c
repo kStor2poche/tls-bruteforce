@@ -41,13 +41,13 @@ int main(int argc, char **argv) {
     const bytearray ciphertext = hexstr_to_bytearray(argv[5]);
     */
 
-    keyring_material test = key_derivation();
+    keyring_material test = key_derivation_tls12(GCRY_CIPHER_AES128, GCRY_MD_SHA256, hexstr_to_bytearray("07a6efff7a2dd8be8e114f2aaca6d448e02ceaf501b5d76c10bd28efffaae3b51d621c64aff5dbd48e4a376a3dc2a99b"), hexstr_to_bytearray("fa04f06c223a813f4fb5381b0db7e9ea217c4f86917fa4053dcb10f6185017fa"), hexstr_to_bytearray("67928cc6ced13aae5c205a91da7d825a460df7bdef15ea65444f574e47524401"));
 
-    print_bytearray(test.skey);
-    print_bytearray(test.siv);
+    print_bytearray(test.s_key);
+    print_bytearray(test.s_iv);
 
     gcry_cipher_hd_t cipher;
-    if (ssl_cipher_init(&cipher, cipher_algo, test.skey.data, test.siv.data, mode) < 0) {
+    if (ssl_cipher_init(&cipher, cipher_algo, test.s_key.data, test.s_iv.data, mode) < 0) {
         fputs("ssl_cipher failed. See message(s) above for context.\n", stderr);
         exit(5);
     };
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
 
     bytearray *out = &(bytearray){.data = malloc(TCP_MAX_SIZE), .len = TCP_MAX_SIZE};
-    if (!tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x303, test.siv, true, packet.data, packet.len, NULL, 0, out)) {
+    if (!tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x303, test.s_iv, true, packet.data, packet.len, NULL, 0, out)) {
         fputs("failure...\n", stderr);
         exit(6);
     };

@@ -1,5 +1,7 @@
 #include <gcrypt.h>
+#include <stdint.h>
 #include <string.h>
+#include <arpa/inet.h>
 #include "bytearray.h"
 #include "key_derivation.h"
 
@@ -8,16 +10,16 @@
 
 // Pseudo-Random Function (TLS 1.2) 
 // Examples are from TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearray *out, int len_needed) {
-    gcry_md_hd_t    md;
+static int prf(int algo, bytearray *secret, bytearray *c_rand, bytearray *s_rand, bytearray *out) {
+    gcry_md_hd_t    h;
+    const unsigned int  h_len = gcry_md_get_algo_dlen(algo);
     gcry_error_t    err;
     const char      *err_str, *err_src;
     bytearray       seed, A, _A, tmp;
-    int             len;
 
     // allocations 
-    // TODO: proper dynamic strings ? Or at least proper sizing ?
-    tmp = (bytearray){malloc(TCP_MAX_SIZE), 0};
+    // TODO : proper size
+    tmp = (bytearray){malloc(h_len), h_len};
     A = (bytearray){malloc(TCP_MAX_SIZE), 0};
     _A = (bytearray){malloc(TCP_MAX_SIZE), 0};
 
@@ -25,106 +27,74 @@ static int prf(bytearray *secret, bytearray *s_rand, bytearray *c_rand, bytearra
     seed.len = 13 + c_rand->len + s_rand->len;
     seed.data = malloc(seed.len);
     memcpy(seed.data, "key expansion", 13);
-    memcpy(seed.data+13, c_rand->data, c_rand->len);
-    memcpy(seed.data+13+c_rand->len, s_rand->data, s_rand->len);
+    memcpy(seed.data+13, s_rand->data, s_rand->len);
+    memcpy(seed.data+13+s_rand->len, c_rand->data, c_rand->len);
 
-    // algo is the hashing algorithm that is gonna be used
-    // GCRY_MD_SHA384, GCRY_MD_SHA256, GCRY_MD_SM3
-    // obtained from the packet ciphersuite last item
-    // TODO : Generalize
-
-    err = gcry_md_open(&md,GCRY_MD_SHA256, GCRY_MD_FLAG_HMAC);
+    err = gcry_md_open(&h, algo, GCRY_MD_FLAG_HMAC);
     if (err != 0) {
         err_str = gcry_strerror(err);
         err_src = gcry_strsource(err);
         printf("prf: gcry_md_open failed %s/%s", err_str, err_src);
-        return 1;
+        return -1;
     }
 
     // A(0) = seed
     A = seed;
-    while (len_needed) {
+    for (size_t offset = 0; offset < out->len; offset += MIN(out->len-offset, h_len)) {
         // A(i) = HMAC_hash(secret, A(i-1))
-        err = gcry_md_setkey(md, secret->data, secret->len);
+        err = gcry_md_setkey(h, secret->data, secret->len);
         if (err != 0) {
             err_str = gcry_strerror(err);
             err_src = gcry_strsource(err);
             printf("prf: gcry_md_setkey failed %s/%s", err_str, err_src);
-            return 1;
+            return -1;
         }
-        gcry_md_write(md, A.data, A.len);
-        //TODO : Generalize
-        len = gcry_md_get_algo_dlen(gcry_md_get_algo(md));
-        memcpy(_A.data, gcry_md_read(md, GCRY_MD_SHA256), len);
-        A.len = len;
+        gcry_md_write(h, A.data, A.len);
+        memcpy(_A.data, gcry_md_read(h, algo), h_len);
+        A.len = h_len;
         A.data = _A.data;
+        gcry_md_reset(h);
 
-        gcry_md_reset(md);
         // HMAC_hash(secret, A(i) + seed)
-        err = gcry_md_setkey(md, secret->data, secret->len);
+        err = gcry_md_setkey(h, secret->data, secret->len);
         if (err != 0) {
             err_str = gcry_strerror(err);
             err_src = gcry_strsource(err);
             printf("prf: gcry_md_setkey failed %s/%s", err_str, err_src);
-            return 1;
+            return -1;
         }
-        gcry_md_write(md, A.data, A.len);
-        gcry_md_write(md, seed.data, seed.len);
-        tmp.len = gcry_md_get_algo_dlen(GCRY_MD_SHA256);
-        memcpy(tmp.data, gcry_md_read(md, GCRY_MD_SHA256), tmp.len);
-        gcry_md_reset(md);
+        gcry_md_write(h, A.data, A.len);
+        gcry_md_write(h, seed.data, seed.len);
+        memcpy(tmp.data, gcry_md_read(h, algo), h_len);
+        gcry_md_reset(h);
 
-        len = MIN(len_needed, tmp.len);
-        memcpy(out->data, tmp.data, len);
-        out->data += len;
-        out->len += len;
-        len_needed -= len;
+        memcpy(out->data + offset, tmp.data, MIN(out->len-offset, h_len));
     }
 
-    gcry_md_close(md);
-    out->data -= out->len;
-
+    gcry_md_close(h);
     return 0;
 }
 
 // TLS 1.2 : https://datatracker.ietf.org/doc/html/rfc5246#section-6.3
-// Recover MAC_key, key
-// For the AEAD ciphers, also recover IV
-keyring_material key_derivation() {
-    bytearray           secret, c_rand, s_rand, out, cmac, smac, ckey, skey, civ, siv;
-    int                 key_len, iv_len, mac_len, len_needed;
-    unsigned char       *ptr;
+keyring_material key_derivation_tls12(int cipher, int hash, bytearray secret, bytearray c_rand, bytearray s_rand) {
+    bytearray       out, c_mac, s_mac, c_key, s_key, c_iv, s_iv;
+    size_t          mac_len, key_len, iv_len, len_needed;
+    unsigned char   *ptr;
 
-    // version = TLS 1.2
-    // client_random = fa04f06c223a813f4fb5381b0db7e9ea217c4f86917fa4053dcb10f6185017fa
-    // server_random = 67928cc6ced13aae5c205a91da7d825a460df7bdef15ea65444f574e47524401
-    // cipher_suite = TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-    // packet = 00000000000000017d9db8ea6bf0370f8c45e947047d22d6758c6b6247f059daa9c65147afa19106635c06cdbd4a696f5c7b49b08271a46146aba3f5248545b3
-    // master_secret 07a6efff7a2dd8be8e114f2aaca6d448e02ceaf501b5d76c10bd28efffaae3b51d621c64aff5dbd48e4a376a3dc2a99b
-
-    c_rand = hexstr_to_bytearray("fa04f06c223a813f4fb5381b0db7e9ea217c4f86917fa4053dcb10f6185017fa");
-    s_rand = hexstr_to_bytearray("67928cc6ced13aae5c205a91da7d825a460df7bdef15ea65444f574e47524401");
-    secret = hexstr_to_bytearray("07a6efff7a2dd8be8e114f2aaca6d448e02ceaf501b5d76c10bd28efffaae3b51d621c64aff5dbd48e4a376a3dc2a99b");
-    out = (bytearray){malloc(TCP_MAX_SIZE), 0};
-
-    // mac_len, key_len and iv_len are the length of the used ciphers
-    // key_len is the 128 in AES_128
-    // TODO : Generalize sizes
-    key_len = 16;
+    mac_len = gcry_md_get_algo_dlen(hash);
+    key_len = gcry_cipher_get_algo_keylen(cipher);
 
     // if CBC
-        //iv_len = gcry_cipher_get_algo_blklen
+        //iv_len = gcry_cipher_get_algo_blklen(cipher)
     // if GCM || CCM || CCM_8
         iv_len = 4;
     // if POLY1305
         //iv_len = 12
 
-    // MD5=16, SHA1=20, SHA256=32, SHA384=48, SM3=32
-    mac_len = 32;
+    len_needed = key_len*2 + iv_len*2 + mac_len*2;
+    out = (bytearray){malloc(len_needed), len_needed};
 
-    len_needed  = key_len*2 + iv_len*2 + mac_len*2;
-
-    prf(&secret, &c_rand, &s_rand, &out, len_needed);
+    prf(hash, &secret, &c_rand, &s_rand, &out);
 
     ptr = out.data;
 
@@ -133,15 +103,99 @@ keyring_material key_derivation() {
         //ptr+=mac_len;
         //smac = (bytearray){ptr, mac_len};
         //ptr+=mac_len;
-    ckey = (bytearray){ptr, key_len};
+    // else
+        c_mac = (bytearray){.data=NULL, .len=0};
+        s_mac = (bytearray){.data=NULL, .len=0};
+
+    c_key = (bytearray){ptr, key_len};
     ptr+= key_len;
-    skey = (bytearray){ptr, key_len};
+    s_key = (bytearray){ptr, key_len};
     ptr+= key_len;
     
-    // if iv_len > 0
-        civ = (bytearray){ptr, iv_len};
+    if (iv_len > 0) {
+        c_iv = (bytearray){ptr, iv_len};
         ptr += iv_len;
-        siv = (bytearray){ptr, iv_len};
+        s_iv = (bytearray){ptr, iv_len};
+    } else {
+        c_iv = (bytearray){.data=NULL, .len=0};
+        s_iv = (bytearray){.data=NULL, .len=0};
+    }
 
-    return (keyring_material){ckey, skey, (bytearray){.data=NULL, .len=0}, (bytearray){.data=NULL, .len=0}, civ, siv};
+    return (keyring_material){c_mac, s_mac, c_key, s_key, c_iv, s_iv};
+}
+
+// TLS1.3 https://datatracker.ietf.org/doc/html/rfc8446#section-7.1
+// HKDF https://datatracker.ietf.org/doc/html/rfc5869
+int hkdf(int algo, bytearray *secret, const bytearray *prefix, bytearray *label, bytearray *out) {
+    // TODO : proper size
+    bytearray info = (bytearray){malloc(TCP_MAX_SIZE), 0};
+    gcry_md_hd_t        h;
+    const unsigned int  h_len = gcry_md_get_algo_dlen(algo);
+    gcry_error_t        err;
+    const char          *err_str, *err_src;
+    unsigned char       last[48];
+
+    const uint16_t out_len = htons((uint16_t)out->len);
+    memcpy(info.data, (const uint8_t *)&out_len, sizeof(out_len));
+    info.len += sizeof(out_len);
+
+    const uint8_t label_len = prefix->len + label->len;
+    memcpy(info.data+info.len, &label_len, 1);
+    info.len += 1;
+    memcpy(info.data+info.len, prefix->data, prefix->len);
+    info.len += prefix->len;
+    memcpy(info.data+info.len, label->data, label->len);
+    info.len += label->len;
+
+    // Empty context
+    *(info.data+info.len) = 0;
+    info.len += 1;
+
+    err = gcry_md_open(&h, algo, GCRY_MD_FLAG_HMAC);
+    if (err != 0) {
+        err_str = gcry_strerror(err);
+        err_src = gcry_strsource(err);
+        printf("prf: gcry_md_open failed %s/%s", err_str, err_src);
+        return -1;
+    }
+
+    for (size_t offset = 0; offset < out->len; offset += h_len) {
+        gcry_md_reset(h);
+        gcry_md_setkey(h, secret->data, secret->len);
+        if (offset > 0) {
+            gcry_md_write(h, last, h_len);
+        }
+        gcry_md_write(h, info.data, info.len);
+        gcry_md_putc(h, (uint8_t) (offset / h_len + 1));
+
+        memcpy(last, gcry_md_read(h, algo), h_len);
+        memcpy(out->data + offset, last, MIN(h_len, out->len - offset));
+    }
+
+    gcry_md_close(h);
+    return 0;
+}
+
+keyring_material key_derivation_tls13(int cipher, int hash, bytearray *c_secret, bytearray *s_secret) {
+    bytearray c_key = (bytearray){malloc(gcry_cipher_get_algo_keylen(cipher)), gcry_cipher_get_algo_keylen(cipher)};
+    bytearray s_key = (bytearray){malloc(gcry_cipher_get_algo_keylen(cipher)), gcry_cipher_get_algo_keylen(cipher)};
+    bytearray c_iv = (bytearray){malloc(12), 12};
+    bytearray s_iv = (bytearray){malloc(12), 12};
+
+    // if tls13_draft_version < 20
+        // const char *prefix = "TLS 1.3, ";
+    // else if version == 0xfefc (DTLSv1.3)
+        // const char *prefix = "dtls13";
+    // else
+        const bytearray prefix = {(unsigned char *)"tls13 ", 6};
+
+    hkdf(hash, c_secret, &prefix, &(bytearray){(unsigned char *)"key", 3}, &c_key);
+    hkdf(hash, s_secret, &prefix, &(bytearray){(unsigned char *)"key", 3}, &s_key);
+    hkdf(hash, c_secret, &prefix, &(bytearray){(unsigned char *)"iv", 2}, &c_iv);
+    hkdf(hash, s_secret, &prefix, &(bytearray){(unsigned char *)"iv", 2}, &s_iv);
+
+    // if version == 0xfefc
+        // hkdf("sn")
+
+    return (keyring_material){(bytearray){.data=NULL, .len=0}, (bytearray){.data=NULL, .len=0}, c_key, s_key, c_iv, s_iv};
 }
