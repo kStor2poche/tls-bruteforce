@@ -34,4 +34,4 @@ run: build
 	./tls-bf $(RUN_ARGS)
 
 clean: 
-	rm *.o
+	if [[ -n $$(find . -name "*.o") ]]; then rm *.o; fi
