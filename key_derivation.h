@@ -1,7 +1,7 @@
 #ifndef KEY_DERIVATION_H
 #define KEY_DERIVATION_H
 
-#include "bytearray.h"
+#include "utils.h"
 typedef struct _keyring_material {
     bytearray c_mac;
     bytearray s_mac;

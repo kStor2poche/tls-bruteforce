@@ -2,5 +2,9 @@
 *.o
 tls-bf
 
+[clangd files]
+compile_commands.json
+.cache/
+
 [gdb history from pwndbg]
 .gdb_history

@@ -102,7 +102,7 @@ void ssl_print_data(const char *header, uint8_t *bytes, size_t byte_len);
 #define G_STRFUNC __func__
 
 /* our stuff */
-#include "bytearray.h"
+#include "utils.h"
 
 int ssl_cipher_init(
         gcry_cipher_hd_t *cipher,

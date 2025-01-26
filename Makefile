@@ -1,5 +1,6 @@
-LIBS:=gcrypt
+LIBS:=-lgcrypt -lpcap
 CFLAGS:=${CFLAGS} -Wall
+CC:=gcc
 
 # If the first argument is "run"...
 ifeq (run,$(firstword $(MAKECMDGOALS)))
@@ -9,20 +10,25 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-bytearray: bytearray.c bytearray.h
-	${CC} ${CFLAGS} -c $< -o bytearray.o
+default: clean build
 
-key_derivation: key_derivation.c key_derivation.h bytearray.o
+utils: utils.c utils.h
+	${CC} ${CFLAGS} -c $< -o utils.o
+
+info_digger: info_digger.c info_digger.h utils.o
+	${CC} ${CFLAGS} -c $< -o info_digger.o
+
+key_derivation: key_derivation.c key_derivation.h utils.o
 	${CC} ${CFLAGS} -c $< -o key_derivation.o
 
-tls_decrypt: tls_decrypt.c tls_decrypt.h bytearray.o
+tls_decrypt: tls_decrypt.c tls_decrypt.h utils.o
 	${CC} ${CFLAGS} -c $< -o tls_decrypt.o
 
-main: main.c tls_decrypt.o key_derivation.o bytearray.o
+main: main.c tls_decrypt.o key_derivation.o utils.o
 	${CC} ${CFLAGS} -c $< -o main.o
 
-build: main.o bytearray.o tls_decrypt.o key_derivation.o
-	${CC} ${CFLAGS} -l${LIBS} $^ -o tls-bf
+build: main.o utils.o tls_decrypt.o key_derivation.o info_digger.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o tls-bf
 
 run: build
 	./tls-bf $(RUN_ARGS)

@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include "bytearray.h"
+#include "utils.h"
 #include "key_derivation.h"
 
 #define TCP_MAX_SIZE 65535

@@ -13,13 +13,14 @@
  */
 
 #include "tls_decrypt.h"
-#include "bytearray.h"
+#include "utils.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <gcrypt.h>
 #include <string.h>
 #include <stdbool.h>
 
+// TODO: have a LUTs file dedicated to all of this
 typedef struct {
     int value;
     char *string;
