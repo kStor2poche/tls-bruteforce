@@ -26,6 +26,12 @@ digger *digger_from_file(char* path) {
         return NULL;
     }
     new_dig->capture = handle;
+
+    new_dig->dug_data.first_app_data = (bytearray){.data=NULL, .len=0};
+    new_dig->dug_data.first_app_actor = NONE;
+    new_dig->dug_data.cipher_suite = 0;
+    new_dig->dug_data.server_random = (bytearray){.data=NULL, .len=0};
+    new_dig->dug_data.tls_ver = 0;
     return new_dig;
 }
 
@@ -46,12 +52,6 @@ static inline int ether_type(digger *self) {
     return ntohs(eth_hdr->ether_type);
 }
 
-typedef enum {
-    NONE,
-    TLS_CLIENT,
-    TLS_SERVER,
-} tls_actor;
-
 static tls_actor has_tls_actor(short sport, short dport, port_list tls_ports) {
     uint16_t nsport = htons(sport);
     uint16_t ndport = htons(dport);
@@ -68,7 +68,7 @@ static tls_actor has_tls_actor(short sport, short dport, port_list tls_ports) {
 }
 
 static void tls_record_debug_print(tls_record_hdr* record) {
-    printf("Content type: 0x%u\n", record->content_type);
+    printf("\nContent type: 0x%u\n", record->content_type);
     printf("Version: 0x%04x\n", ntohs(record->ver));
     printf("Length: 0x%04x\n", ntohs(record->len));
 }
@@ -79,32 +79,61 @@ static void tls_handshake_debug_print(tls_handshake_hdr* handshake) {
     printf("\tVersion: 0x%04x\n", ntohs(handshake->ver));
 }
 
-static void analyze_tls_record(digger* self, bytearray record_bytearray, tls_actor actor) {
-    puts("");
-    tls_record_hdr *record = (tls_record_hdr *) record_bytearray.data;
-    tls_record_debug_print(record);
+static bool dig_complete(digger *self) {
+    return self->dug_data.first_app_data.data != NULL
+        && self->dug_data.first_app_actor != NONE
+        && self->dug_data.cipher_suite != 0
+        && self->dug_data.server_random.data != NULL
+        && self->dug_data.tls_ver != 0;
+}
 
-    //TODO: actual analysis and information retrieval
+static bool analyze_tls_record(digger* self, bytearray record_bytearray, tls_actor actor) {
+    tls_record_hdr *record = (tls_record_hdr *) record_bytearray.data;
+    //tls_record_debug_print(record);
+    uint16_t h_record_len = ntohs(record->len);
+
     if (record->content_type == TLS_HANDSHAKE) {
         tls_handshake_hdr *handshake_hdr = (tls_handshake_hdr *)((uint8_t*)record + 5);
-        tls_handshake_debug_print(handshake_hdr);
+        //tls_handshake_debug_print(handshake_hdr);
         if (handshake_hdr->msg_type == TLS_HS_SERVER_HELLO) {
+          
+            self->dug_data.tls_ver = ntohs(handshake_hdr->ver);
+            
+            // TODO: verify correctness for TLS 1.3
+            self->dug_data.server_random.len = 0x20;
+            self->dug_data.server_random.data = malloc(self->dug_data.server_random.len);
+            memcpy(self->dug_data.server_random.data,
+                    (uint8_t *)handshake_hdr + 6,
+                    self->dug_data.server_random.len);
+           
+            self->dug_data.cipher_suite = ntohs(*(uint16_t *)((uint8_t *)handshake_hdr + 6 + 0x41));
         }
+        // TODO: cycle through the actual handshake headers? (but is it ever necessary?) (beware of misaligned len)
+    } else if (record->content_type == TLS_APPLICATION) {
+        self->dug_data.first_app_actor = actor;
+        self->dug_data.first_app_data.len = h_record_len;
+        self->dug_data.first_app_data.data = malloc(h_record_len);
+        memcpy(self->dug_data.first_app_data.data, (uint8_t *)record + 5, h_record_len);
     }
 
     // In the function name, record is singular. However, due to TCP reassembly shenanigans,
     // we might actually get multiple records in one call.
-    if (record->len + 5 != record_bytearray.len) {
-        // TODO: adavance bytearray first
-        // then
-        // analyze_tls_record(self, record_bytearray, actor);
+    if (h_record_len + 5 < record_bytearray.len) {
+        record_bytearray.len -= h_record_len + 5;
+        record_bytearray.data += h_record_len + 5;
+        analyze_tls_record(self, record_bytearray, actor);
+    } else if (h_record_len + 5 > record_bytearray.len) {
+        puts("Warning: Current record is (smh) incomplete");
     }
+
+    return dig_complete(self);
 }
 
 // Finds TLS version, algo, server random & first packet from capture (& tcp epoch for hmac ?)
 dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
     // variables for TCP app content reassembly
     bytearray last_app_data = (bytearray){.data = NULL, .len = 0};
+    tls_actor last_actor = NONE;
     uint32_t cur_ack = UINT32_MAX;
     uint32_t last_ack = UINT32_MAX;
 
@@ -117,10 +146,8 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
                 fprintf(stderr, "Error: in %s: %s\n", __func__, pcap_geterr(self->capture));
                 return DIG_PCAP_ERR;
             case PCAP_ERROR_BREAK:
-                // TODO: maybe return a CAPTURE_INCOMPLETE-ish return val depending on a 
-                // to-be-implemented analysis status return on `analyze_tls_record` ?
                 puts("Info: ran out of packets to dig...");
-                return 1;
+                return DIG_OUT_OF_PACKETS;
             case PCAP_ERROR_NOT_ACTIVATED:
                 fprintf(stderr, "Error: in %s: pcap handle missing activation\n", __func__);
                 return DIG_PCAP_ERR;
@@ -178,7 +205,9 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
         if (cur_ack != last_ack) {
             // time to analyze reassembled packet...
             if (last_app_data.data != NULL) {
-                analyze_tls_record(self, last_app_data, actor);
+                if (analyze_tls_record(self, last_app_data, last_actor)) {
+                    return DIG_SUCCESS;
+                };
             }
 
             // ...and pave the way for new ones
@@ -192,6 +221,7 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
 
             memcpy(last_app_data.data, segment_hdr + tcp_hdr_len, data_len);
             last_app_data.len = data_len;
+            last_actor = actor;
         } else {
             void *ret = realloc(last_app_data.data, data_len + last_app_data.len);
 

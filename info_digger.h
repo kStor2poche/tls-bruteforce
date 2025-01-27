@@ -7,17 +7,24 @@
 #include <pcap/pcap.h>
 #include <stdint.h>
 
+typedef enum {
+    NONE,
+    TLS_CLIENT,
+    TLS_SERVER,
+} tls_actor;
+
 typedef struct _dug_data {
     uint16_t tls_ver;
     uint16_t cipher_suite;
     bytearray server_random;
     bytearray first_app_data;
+    tls_actor first_app_actor;
 } dug_data;
 
 typedef struct _digger {
     pcap_t *capture;
-    char errbuf[PCAP_ERRBUF_SIZE];
     struct pcap_pkthdr *cur_hdr;
+    char errbuf[PCAP_ERRBUF_SIZE];
     const uint8_t *cur_packet;
     bytearray cur_packet_barr;
     dug_data dug_data;
@@ -25,6 +32,7 @@ typedef struct _digger {
 
 typedef enum _dig_ret {
     DIG_SUCCESS,
+    DIG_OUT_OF_PACKETS,
     DIG_PCAP_ERR,
     DIG_INCOMPLETE_CAPTURE,
     DIG_REALLOC_FAILURE,

@@ -20,15 +20,23 @@ int main(int argc, char **argv) {
     digger *dig = digger_from_file(argv[3]);
 
     // TODO: proper call, results, etc
-    int _ = dig_dig_deep_deep(dig, tls_ports);
-    exit(9);
+    dig_ret res = dig_dig_deep_deep(dig, tls_ports);
 
-    char *cipher_str = "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256";
-    int cipher_suite = algo_from_str(cipher_str);
-    if (cipher_suite == -1) {
-        fputs("Unrecognised cipher suite", stderr);
-        exit(3);
+    if (res != DIG_SUCCESS) {
+        exit(2);
     }
+
+    dug_data data = dig->dug_data;
+    puts("\nDebug: here's what was dug out");
+    printf("    TLS version: %04x\n", data.tls_ver);
+    printf("    Cipher suite: %04x\n", data.cipher_suite);
+    printf("    ");
+    print_bytearray(data.server_random);
+    printf("    1st app actor: %d\n", data.first_app_actor);
+    printf("    ");
+    print_bytearray(data.first_app_data);
+
+    int cipher_suite = data.cipher_suite;
 
     // TODO: parse from cipher suite (WITH gcry_cipher_map_name ???)
     int cipher_algo = GCRY_CIPHER_AES128;
@@ -37,9 +45,9 @@ int main(int argc, char **argv) {
     char *mode_str = "GCM";
     int mode = mode_from_str(mode_str);
 
-    keyring_material test = key_derivation_tls12(GCRY_CIPHER_AES128, GCRY_MD_SHA256, hexstr_to_bytearray("07a6efff7a2dd8be8e114f2aaca6d448e02ceaf501b5d76c10bd28efffaae3b51d621c64aff5dbd48e4a376a3dc2a99b"), hexstr_to_bytearray("fa04f06c223a813f4fb5381b0db7e9ea217c4f86917fa4053dcb10f6185017fa"), hexstr_to_bytearray("67928cc6ced13aae5c205a91da7d825a460df7bdef15ea65444f574e47524401"));
+    keyring_material test = key_derivation_tls12(GCRY_CIPHER_AES128, GCRY_MD_SHA256, hexstr_to_bytearray("07a6efff7a2dd8be8e114f2aaca6d448e02ceaf501b5d76c10bd28efffaae3b51d621c64aff5dbd48e4a376a3dc2a99b"), hexstr_to_bytearray(argv[1]), data.server_random);
 
-    bytearray packet = hexstr_to_bytearray(argv[2]);
+    bytearray packet = data.first_app_data;
     print_bytearray(test.s_key);
     print_bytearray(test.s_iv);
 
