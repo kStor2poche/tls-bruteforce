@@ -49,11 +49,12 @@ int main(int argc, char **argv) {
     int cipher_suite_number = data.cipher_suite;
     SslCipherSuite cipher_suite = get_cipher_suite_by_number(cipher_suite_number);
     int cipher_algo = get_cipher_suite_gcry_algo(&cipher_suite);
-    int mode = cipher_suite.mode; // we don't use the gcry one because reasons
+    int mode = cipher_suite.mode; // we don't use the gcry one because the functions need the
+                                  // "wireshark" one and proceed to the gcry conversion themselves
     int hash_algo = get_cipher_suite_gcry_digest(&cipher_suite);
     if (mode == -1 || cipher_algo == 0 || hash_algo == -1) {
-        /* Identifiers are unusable, fail. */
-        return false;
+        // Identifiers are unusable, fail.
+        exit(3);
     }
 
 
