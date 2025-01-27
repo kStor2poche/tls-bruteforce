@@ -68,15 +68,19 @@ static tls_actor has_tls_actor(short sport, short dport, port_list tls_ports) {
 }
 
 static void tls_record_debug_print(tls_record_hdr* record) {
-    printf("\nContent type: 0x%u\n", record->content_type);
-    printf("Version: 0x%04x\n", ntohs(record->ver));
-    printf("Length: 0x%04x\n", ntohs(record->len));
+    if (getenv("DEBUG_DIG") != NULL) {
+        printf("\nContent type: 0x%u\n", record->content_type);
+        printf("Version: 0x%04x\n", ntohs(record->ver));
+        printf("Length: 0x%04x\n", ntohs(record->len));
+    }
 }
 
 static void tls_handshake_debug_print(tls_handshake_hdr* handshake) {
-    printf("\tMessage type: 0x%02x\n", handshake->msg_type);
-    printf("\tLength: 0x%06x\n", ntohl(handshake->len));
-    printf("\tVersion: 0x%04x\n", ntohs(handshake->ver));
+    if (getenv("TLS_BF_DEBUG") != NULL) {
+        printf("\tMessage type: 0x%02x\n", handshake->msg_type);
+        printf("\tLength: 0x%06x\n", ntohl(handshake->len));
+        printf("\tVersion: 0x%04x\n", ntohs(handshake->ver));
+    }
 }
 
 static bool dig_complete(digger *self) {
@@ -89,12 +93,12 @@ static bool dig_complete(digger *self) {
 
 static bool analyze_tls_record(digger* self, bytearray record_bytearray, tls_actor actor) {
     tls_record_hdr *record = (tls_record_hdr *) record_bytearray.data;
-    //tls_record_debug_print(record);
+    tls_record_debug_print(record);
     uint16_t h_record_len = ntohs(record->len);
 
     if (record->content_type == TLS_HANDSHAKE) {
         tls_handshake_hdr *handshake_hdr = (tls_handshake_hdr *)((uint8_t*)record + 5);
-        //tls_handshake_debug_print(handshake_hdr);
+        tls_handshake_debug_print(handshake_hdr);
         if (handshake_hdr->msg_type == TLS_HS_SERVER_HELLO) {
           
             self->dug_data.tls_ver = ntohs(handshake_hdr->ver);
@@ -117,7 +121,7 @@ static bool analyze_tls_record(digger* self, bytearray record_bytearray, tls_act
     }
 
     // In the function name, record is singular. However, due to TCP reassembly shenanigans,
-    // we might actually get multiple records in one call.
+    // we might actually get multiple records in record_bytearray.
     if (h_record_len + 5 < record_bytearray.len) {
         record_bytearray.len -= h_record_len + 5;
         record_bytearray.data += h_record_len + 5;
@@ -130,6 +134,7 @@ static bool analyze_tls_record(digger* self, bytearray record_bytearray, tls_act
 }
 
 // Finds TLS version, algo, server random & first packet from capture (& tcp epoch for hmac ?)
+// TODO: maybe be less dumb and get this off of libwireshark (though epan initialisation looks like a huge hassle)
 dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
     // variables for TCP app content reassembly
     bytearray last_app_data = (bytearray){.data = NULL, .len = 0};
@@ -157,7 +162,7 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
         }
 
         if (self->cur_hdr->len != self->cur_hdr->caplen) {
-            fputs("Error: Found incomplete packet!! (bad capture ?)", stderr);
+            fputs("Error: Found incomplete packet!! (bad capture ?)\n", stderr);
             return DIG_INCOMPLETE_CAPTURE;
         }
 
@@ -214,7 +219,7 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
             void *ret = realloc(last_app_data.data, data_len);
             
             if (ret == NULL) {
-                fputs("Error: no more memory left for realloc call, horrible things might be happening", stderr);
+                fputs("Error: no more memory left for realloc call, horrible things might be happening\n", stderr);
                 return DIG_REALLOC_FAILURE;
             }
             last_app_data.data = ret;
@@ -226,7 +231,7 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
             void *ret = realloc(last_app_data.data, data_len + last_app_data.len);
 
             if (ret == NULL) {
-                fputs("Error: no more memory left for realloc call, horrible things might be happening", stderr);
+                fputs("Error: no more memory left for realloc call, horrible things might be happening\n", stderr);
                 return DIG_REALLOC_FAILURE;
             }
             last_app_data.data = ret;

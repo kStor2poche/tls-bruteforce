@@ -2,7 +2,6 @@
 #define INFO_DIGGER_H
 
 #include "utils.h"
-#include "utils.h"
 #include <sys/types.h>
 #include <pcap/pcap.h>
 #include <stdint.h>

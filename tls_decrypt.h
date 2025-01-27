@@ -52,17 +52,6 @@ typedef enum {
     SSL_ID_DTLS13_ACK              = 0x1A,
 } ContentType;
 
-/* SSL Cipher Suite modes */
-typedef enum {
-    MODE_STREAM,    /* GenericStreamCipher */
-    MODE_CBC,       /* GenericBlockCipher */
-    MODE_GCM,       /* GenericAEADCipher */
-    MODE_CCM,       /* AEAD_AES_{128,256}_CCM with 16 byte auth tag */
-    MODE_CCM_8,     /* AEAD_AES_{128,256}_CCM with 8 byte auth tag */
-    MODE_POLY1305,  /* AEAD_CHACHA20_POLY1305 with 16 byte auth tag (RFC 7905) */
-    MODE_ECB, /* ECB: used to perform record seq number encryption in DTLSv1.3 */
-} ssl_cipher_mode_t;
-
 /* Explicit and implicit nonce length (RFC 5116 - Section 3.2.1) */
 #define IMPLICIT_NONCE_LEN  4
 #define EXPLICIT_NONCE_LEN  8
@@ -103,6 +92,7 @@ void ssl_print_data(const char *header, uint8_t *bytes, size_t byte_len);
 
 /* our stuff */
 #include "utils.h"
+#include "cipher_suite_extraction.h"
 
 int ssl_cipher_init(
         gcry_cipher_hd_t *cipher,

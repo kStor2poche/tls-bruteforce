@@ -34,7 +34,7 @@ static int prf(int algo, bytearray *secret, bytearray *c_rand, bytearray *s_rand
     if (err != 0) {
         err_str = gcry_strerror(err);
         err_src = gcry_strsource(err);
-        printf("prf: gcry_md_open failed %s/%s", err_str, err_src);
+        printf("prf: gcry_md_open failed %s/%s\n", err_str, err_src);
         return -1;
     }
 
@@ -46,7 +46,7 @@ static int prf(int algo, bytearray *secret, bytearray *c_rand, bytearray *s_rand
         if (err != 0) {
             err_str = gcry_strerror(err);
             err_src = gcry_strsource(err);
-            printf("prf: gcry_md_setkey failed %s/%s", err_str, err_src);
+            printf("prf: gcry_md_setkey failed %s/%s\n", err_str, err_src);
             return -1;
         }
         gcry_md_write(h, A.data, A.len);
@@ -60,7 +60,7 @@ static int prf(int algo, bytearray *secret, bytearray *c_rand, bytearray *s_rand
         if (err != 0) {
             err_str = gcry_strerror(err);
             err_src = gcry_strsource(err);
-            printf("prf: gcry_md_setkey failed %s/%s", err_str, err_src);
+            printf("prf: gcry_md_setkey failed %s/%s\n", err_str, err_src);
             return -1;
         }
         gcry_md_write(h, A.data, A.len);
@@ -155,7 +155,7 @@ int hkdf(int algo, bytearray *secret, const bytearray *prefix, bytearray *label,
     if (err != 0) {
         err_str = gcry_strerror(err);
         err_src = gcry_strsource(err);
-        printf("prf: gcry_md_open failed %s/%s", err_str, err_src);
+        printf("prf: gcry_md_open failed %s/%s\n", err_str, err_src);
         return -1;
     }
 
