@@ -118,6 +118,7 @@ static bool analyze_tls_record(digger* self, bytearray record_bytearray, tls_act
         self->dug_data.first_app_data.len = h_record_len;
         self->dug_data.first_app_data.data = malloc(h_record_len);
         memcpy(self->dug_data.first_app_data.data, (uint8_t *)record + 5, h_record_len);
+        return dig_complete(self); // should be !
     }
 
     // In the function name, record is singular. However, due to TCP reassembly shenanigans,

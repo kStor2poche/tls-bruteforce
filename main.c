@@ -35,16 +35,16 @@ int main(int argc, char **argv) {
     dug_data data = dig->dug_data;
 
     // TODO: implement this kind of thing properly, with specific logging functions and retrieve env 1 time only
-    if (true) {
-        puts("\nDebug: here's what was dug out");
-        printf("    TLS version: %04x\n", data.tls_ver);
-        printf("    Cipher suite: %04x\n", data.cipher_suite);
-        printf("    ");
-        print_bytearray(data.server_random);
-        printf("    1st app actor: %d\n", data.first_app_actor);
-        printf("    ");
-        print_bytearray(data.first_app_data);
-    }
+    // if (secure_getenv(TLS_BF_DEBUG) != NULL) {
+    //     puts("\nDebug: here's what was dug out");
+    //     printf("    TLS version: %04x\n", data.tls_ver);
+    //     printf("    Cipher suite: %04x\n", data.cipher_suite);
+    //     printf("    ");
+    //     print_bytearray(data.server_random);
+    //     printf("    1st app actor: %d\n", data.first_app_actor);
+    //     printf("    ");
+    //     print_bytearray(data.first_app_data);
+    // }
 
     int cipher_suite_number = data.cipher_suite;
     SslCipherSuite cipher_suite = get_cipher_suite_by_number(cipher_suite_number);
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         print_bytearray(derived.s_iv);
 
         gcry_cipher_hd_t cipher;
-        if (ssl_cipher_init(&cipher, cipher_algo, derived.s_key.data, derived.s_iv.data, mode) < 0) {
+        if (ssl_cipher_init(&cipher, cipher_algo, data.first_app_actor == TLS_CLIENT ? derived.c_key.data : derived.s_key.data, data.first_app_actor == TLS_CLIENT ? derived.c_iv.data : derived.s_iv.data, mode) < 0) {
             fputs("ssl_cipher failed. See message(s) above for context.\n", stderr);
             exit(5);
         };
@@ -90,10 +90,10 @@ int main(int argc, char **argv) {
         // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
 
         bytearray *out = &(bytearray){.data = malloc(TCP_MAX_SIZE), .len = TCP_MAX_SIZE};
-        if (tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, 0x303, derived.s_iv, false, packet.data, packet.len, NULL, 0, out)) {
+        if (tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, data.tls_ver, data.first_app_actor == TLS_CLIENT ? derived.c_iv : derived.s_iv, false, packet.data, packet.len, NULL, 0, out)) {
             break;
         };
     }
     fclose(key_list_file);
-    printf("Found key %s", cur_key);
+    printf("Found key %s\n", cur_key);
 }
