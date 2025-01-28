@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     }
 
     bytearray client_random = hexstr_to_bytearray(argv[1]);
-    FILE *key_list_file = fopen(argv[2], "rb");
+    FILE *key_list_file = fopen(argv[2], "r");
     if (key_list_file == NULL) {
         fputs("Error: key list file not found\n", stderr);
         exit(3);
@@ -59,15 +59,18 @@ int main(int argc, char **argv) {
 
 
     // BF the keys !
-    char cur_key[48];
+    char *cur_key = NULL;
     size_t cur_key_len = 0;
     while(true) {
-        if (fread(&cur_key, sizeof(uint8_t), sizeof(cur_key), key_list_file) != sizeof(cur_key)) {
+        if (cur_key != NULL) {
+            free(cur_key);
+        }
+        if (getline(&cur_key, &cur_key_len, key_list_file) == -1) {
             puts("Keys exhausted");
             exit(4);
         }; // yes, we don't care about \n in cur_key
 
-        bytearray cur_key_bytearray = (bytearray){.data=(uint8_t *)cur_key, .len=48};
+        bytearray cur_key_bytearray = hexstr_to_bytearray(cur_key);
         keyring_material derived;
         if (data.tls_ver == TLSV1DOT2_VERSION) {
             derived = key_derivation_tls12(cipher_algo, hash_algo, cur_key_bytearray, client_random, data.server_random);
@@ -94,9 +97,5 @@ int main(int argc, char **argv) {
         };
     }
     fclose(key_list_file);
-    printf("Found key =");
-    for (size_t i = 0; i<48; i++) {
-        printf("%02x", cur_key[i]);
-    }
-    puts("");
+    printf("Found key %s", cur_key);
 }
