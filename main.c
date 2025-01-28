@@ -94,5 +94,9 @@ int main(int argc, char **argv) {
         };
     }
     fclose(key_list_file);
-    printf("Found key %s", cur_key);
+    printf("Found key =");
+    for (size_t i = 0; i<48; i++) {
+        printf("%02x", cur_key[i]);
+    }
+    puts("");
 }
