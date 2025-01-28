@@ -35,16 +35,16 @@ int main(int argc, char **argv) {
     dug_data data = dig->dug_data;
 
     // TODO: implement this kind of thing properly, with specific logging functions and retrieve env 1 time only
-    //if (secure_getenv("TLS_BF_DEBUG") != NULL) {
-    //    puts("\nDebug: here's what was dug out");
-    //    printf("    TLS version: %04x\n", data.tls_ver);
-    //    printf("    Cipher suite: %04x\n", data.cipher_suite);
-    //    printf("    ");
-    //    print_bytearray(data.server_random);
-    //    printf("    1st app actor: %d\n", data.first_app_actor);
-    //    printf("    ");
-    //    print_bytearray(data.first_app_data);
-    //}
+    if (true) {
+        puts("\nDebug: here's what was dug out");
+        printf("    TLS version: %04x\n", data.tls_ver);
+        printf("    Cipher suite: %04x\n", data.cipher_suite);
+        printf("    ");
+        print_bytearray(data.server_random);
+        printf("    1st app actor: %d\n", data.first_app_actor);
+        printf("    ");
+        print_bytearray(data.first_app_data);
+    }
 
     int cipher_suite_number = data.cipher_suite;
     SslCipherSuite cipher_suite = get_cipher_suite_by_number(cipher_suite_number);
@@ -59,18 +59,16 @@ int main(int argc, char **argv) {
 
 
     // BF the keys !
-    char *cur_key = NULL;
-    size_t cur_key_len = 0;
+    char cur_key[48*2 + 1];
     while(true) {
-        if (cur_key != NULL) {
-            free(cur_key);
-        }
-        if (getline(&cur_key, &cur_key_len, key_list_file) == -1) {
+        if (fread(&cur_key, sizeof(char), sizeof(cur_key) - 1, key_list_file) != sizeof(cur_key) - 1) {
             puts("Keys exhausted");
             exit(4);
-        }; // yes, we don't care about \n in cur_key
+        };
+        cur_key[96] = 0;
 
         bytearray cur_key_bytearray = hexstr_to_bytearray(cur_key);
+        print_bytearray(cur_key_bytearray);
         keyring_material derived;
         if (data.tls_ver == TLSV1DOT2_VERSION) {
             derived = key_derivation_tls12(cipher_algo, hash_algo, cur_key_bytearray, client_random, data.server_random);
