@@ -68,7 +68,7 @@ static tls_actor has_tls_actor(short sport, short dport, port_list tls_ports) {
 }
 
 static void tls_record_debug_print(tls_record_hdr* record) {
-    if (getenv("DEBUG_DIG") != NULL) {
+    if (getenv("TLS_BF_DEBUG") != NULL) {
         printf("\nContent type: 0x%u\n", record->content_type);
         printf("Version: 0x%04x\n", ntohs(record->ver));
         printf("Length: 0x%04x\n", ntohs(record->len));
@@ -78,7 +78,7 @@ static void tls_record_debug_print(tls_record_hdr* record) {
 static void tls_handshake_debug_print(tls_handshake_hdr* handshake) {
     if (getenv("TLS_BF_DEBUG") != NULL) {
         printf("\tMessage type: 0x%02x\n", handshake->msg_type);
-        printf("\tLength: 0x%06x\n", ntohl(handshake->len));
+        printf("\tLength: 0x%06x\n", ntohl(handshake->len) >> 8);
         printf("\tVersion: 0x%04x\n", ntohs(handshake->ver));
     }
 }
@@ -193,7 +193,8 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
 
         struct tcphdr* tcp_hdr = (struct tcphdr *)segment_hdr;
         uint8_t tcp_hdr_len = tcp_hdr->doff * 4;
-        if (tcp_hdr_len >= (self->cur_packet + self->cur_hdr->caplen - segment_hdr)) {
+        if (tcp_hdr_len >= (self->cur_packet + self->cur_hdr->caplen - segment_hdr)
+                || self->cur_hdr->caplen == 60) { // caplen = 60 indicates empty tcp w/ eth padding
             continue;
         }
 
