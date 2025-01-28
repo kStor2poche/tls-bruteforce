@@ -4,10 +4,10 @@ CC:=gcc
 
 # If the first argument is "run"...
 ifeq (run,$(firstword $(MAKECMDGOALS)))
-  # use the rest as arguments for "run"
-  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-  # ...and turn them into do-nothing targets
-  $(eval $(RUN_ARGS):;@:)
+    # use the rest as arguments for "run"
+    RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+    # ...and turn them into do-nothing targets
+    $(eval $(RUN_ARGS):;@:)
 endif
 
 default: clean build
@@ -31,7 +31,7 @@ main: main.c tls_decrypt.o key_derivation.o utils.o info_digger.o cipher_suite_e
 	${CC} ${CFLAGS} -c $< -o main.o
 
 build: main.o tls_decrypt.o key_derivation.o utils.o info_digger.o cipher_suite_extraction.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o tls-bf
+	${CC} ${CFLAGS} $^ -o tls-bf ${LIBS}
 
 run: build
 	./tls-bf $(RUN_ARGS)
