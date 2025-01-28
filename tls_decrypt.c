@@ -189,7 +189,7 @@ bool tls_decrypt_aead_record(
         fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
         return -1;
     }
-    ssl_print_data("nonce", nonce, 12);
+    //ssl_print_data("nonce", nonce, 12);
     err = gcry_cipher_setiv(decoder->evp, nonce, 12);
     if (err != 0) {
         printf("%s failed to set nonce: %s\n", G_STRFUNC, gcry_strerror(err));
@@ -233,7 +233,7 @@ bool tls_decrypt_aead_record(
         aad[8] = ct;                        /* TLSCompressed.type */
         phton16(aad + 9, record_version);   /* TLSCompressed.version */
         phton16(aad + 11, ciphertext_len);  /* TLSCompressed.length */
-        ssl_print_data("aad", aad, aad_len);
+        //ssl_print_data("aad", aad, aad_len);
     } else if (version == DTLSV1DOT3_VERSION) {
         // FIXME: not handling this for now
         exit(10);
@@ -280,11 +280,11 @@ bool tls_decrypt_aead_record(
         ssl_print_data("auth_tag(OK)", auth_tag_calc, auth_tag_len);
     } else {
         if (err) {
-            printf("%s cannot obtain tag: %s\n", G_STRFUNC, gcry_strerror(err));
+            //printf("%s cannot obtain tag: %s\n", G_STRFUNC, gcry_strerror(err));
         } else {
-            printf("%s auth tag mismatch\n", G_STRFUNC);
-            ssl_print_data("auth_tag(expect)", auth_tag_calc, auth_tag_len);
-            ssl_print_data("auth_tag(actual)", (uint8_t *)auth_tag_wire, auth_tag_len);
+            //printf("%s auth tag mismatch\n", G_STRFUNC);
+            //ssl_print_data("auth_tag(expect)", auth_tag_calc, auth_tag_len);
+            //ssl_print_data("auth_tag(actual)", (uint8_t *)auth_tag_wire, auth_tag_len);
         }
         if (ignore_mac_failed) {
             printf("%s: auth check failed, but ignored for troubleshooting ;-)\n", G_STRFUNC);

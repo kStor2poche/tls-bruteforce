@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
         cur_key[96] = 0;
 
         bytearray cur_key_bytearray = hexstr_to_bytearray(cur_key);
-        print_bytearray(cur_key_bytearray);
+        // print_bytearray(cur_key_bytearray);
         keyring_material derived;
         if (data.tls_ver == TLSV1DOT2_VERSION) {
             derived = key_derivation_tls12(cipher_algo, hash_algo, cur_key_bytearray, client_random, data.server_random);
@@ -77,8 +77,8 @@ int main(int argc, char **argv) {
         }
 
         bytearray packet = data.first_app_data;
-        print_bytearray(derived.s_key);
-        print_bytearray(derived.s_iv);
+        //print_bytearray(derived.s_key);
+        //print_bytearray(derived.s_iv);
 
         gcry_cipher_hd_t cipher;
         if (ssl_cipher_init(&cipher, cipher_algo, data.first_app_actor == TLS_CLIENT ? derived.c_key.data : derived.s_key.data, data.first_app_actor == TLS_CLIENT ? derived.c_iv.data : derived.s_iv.data, mode) < 0) {
