@@ -63,7 +63,6 @@ int ssl_cipher_init(
     return 0;
 }
 
-//TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
 inline int ssl_cipher_decrypt(
         gcry_cipher_hd_t *cipher,
         unsigned char * out,

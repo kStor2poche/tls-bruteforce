@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     FILE *key_list_file = fopen(argv[2], "r");
     if (key_list_file == NULL) {
         fputs("Error: key list file not found\n", stderr);
-        exit(3);
+        exit(2);
     }
     digger *dig = digger_from_file(argv[3]);
     port_list tls_ports = parse_port_list(argv[4]);
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     dig_ret res = dig_dig_deep_deep(dig, tls_ports);
     if (res != DIG_SUCCESS) {
         fputs("Information dig failed\n", stderr);
-        exit(2);
+        exit(3);
     }
     dug_data data = dig->dug_data;
 
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     int hash_algo = get_cipher_suite_gcry_digest(&cipher_suite);
     if (mode == -1 || cipher_algo == 0 || hash_algo == -1) {
         // Identifiers are unusable, fail.
-        exit(3);
+        exit(4);
     }
 
 
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     while(true) {
         if (fread(&cur_key, sizeof(char), sizeof(cur_key) - 1, key_list_file) != sizeof(cur_key) - 1) {
             puts("Keys exhausted");
-            exit(4);
+            exit(5);
         };
         cur_key[96] = 0;
 
@@ -83,16 +83,27 @@ int main(int argc, char **argv) {
         gcry_cipher_hd_t cipher;
         if (ssl_cipher_init(&cipher, cipher_algo, data.first_app_actor == TLS_CLIENT ? derived.c_key.data : derived.s_key.data, data.first_app_actor == TLS_CLIENT ? derived.c_iv.data : derived.s_iv.data, mode) < 0) {
             fputs("ssl_cipher failed. See message(s) above for context.\n", stderr);
-            exit(5);
+            exit(6);
         };
-
-        // for next tests
-        // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
 
         bytearray *out = &(bytearray){.data = malloc(TCP_MAX_SIZE), .len = TCP_MAX_SIZE};
-        if (tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, data.tls_ver, data.first_app_actor == TLS_CLIENT ? derived.c_iv : derived.s_iv, false, packet.data, packet.len, NULL, 0, out)) {
-            break;
-        };
+
+        if (mode == MODE_GCM ||
+            mode == MODE_CCM ||
+            mode == MODE_CCM_8 ||
+            mode == MODE_POLY1305 ||
+            data.tls_ver == TLSV1DOT3_VERSION ||
+            data.tls_ver == DTLSV1DOT3_VERSION) {
+            if (tls_decrypt_aead_record(&cipher, mode, SSL_ID_APP_DATA, data.tls_ver, data.first_app_actor == TLS_CLIENT ? derived.c_iv : derived.s_iv, false, packet.data, packet.len, NULL, 0, out)) {
+                break;
+            };
+        } else {
+            // for next tests
+            // TODO: to be implemented and tested
+            // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, packet.data, packet.len);
+            puts("Aborting: decryption not yet implemented for non-aead ciphers");
+            exit(7);
+        }
     }
     fclose(key_list_file);
     printf("Found key %s\n", cur_key);
