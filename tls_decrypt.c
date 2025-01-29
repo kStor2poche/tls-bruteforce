@@ -77,7 +77,7 @@ inline int ssl_cipher_decrypt(
             memcpy(out, in, outl < inl ? outl : inl);
         return 0;
     }
-    return gcry_cipher_decrypt ( *(cipher), out, outl, in, inl);
+    return gcry_cipher_decrypt (*(cipher), out, outl, in, inl);
 }
 
 // SslDecoder stub for testing purposes
@@ -87,6 +87,9 @@ typedef struct _SslDecoder {
     uint16_t epoch;
 } SslDecoder;
 
+// Decrypt records for an aead cipher.
+// TODO: cleanup and implement missing ciphers/whatevers
+// TODO: use bytearrays as io
 bool tls_decrypt_aead_record(
         gcry_cipher_hd_t *cipher,
         ssl_cipher_mode_t mode,

@@ -12,7 +12,7 @@ endif
 
 default: clean build
 
-log: log.c log.h
+log: log.c log.h utils.o
 	${CC} ${CFLAGS} -c $< -o log.o
 
 utils: utils.c utils.h
