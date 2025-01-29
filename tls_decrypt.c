@@ -131,7 +131,7 @@ bool tls_decrypt_aead_record(
         auth_tag_len = 8;
         break;
     default:
-        tls_bf_logf(ERROR, "in %s: %s unsupported cipher!", __func__);
+        tls_bf_logf(ERROR, "in %s: Unsupported cipher!", __func__);
         return false;
     }
 
@@ -140,7 +140,7 @@ bool tls_decrypt_aead_record(
         if (inl < EXPLICIT_NONCE_LEN + auth_tag_len) {
             tls_bf_logf(
                 ERROR,
-                "in %s: input %d is too small for explicit nonce %d and auth tag %d",
+                "in %s: Input %d is too small for explicit nonce %d and auth tag %d",
                 __func__,
                 inl,
                 EXPLICIT_NONCE_LEN,
@@ -153,7 +153,7 @@ bool tls_decrypt_aead_record(
         ciphertext_len = inl - EXPLICIT_NONCE_LEN - auth_tag_len;
     } else if (version == TLSV1DOT3_VERSION || version == DTLSV1DOT3_VERSION || cipher_mode == MODE_POLY1305) {
         if (inl < auth_tag_len) {
-            tls_bf_logf(ERROR, "in %s: input %d has no space for auth tag %d", __func__, inl, auth_tag_len);
+            tls_bf_logf(ERROR, "in %s: Input %d has no space for auth tag %d", __func__, inl, auth_tag_len);
             return false;
         }
         ciphertext = in;

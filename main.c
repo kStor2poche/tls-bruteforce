@@ -100,8 +100,8 @@ int main(int argc, char **argv) {
                 break;
             };
         } else {
-            // for next tests
-            // TODO: to be implemented and tested
+            // TODO: to be implemented and tested, probably needs further wrapping
+            //       than current `ssl_cipher_decrypt` function
             // ssl_cipher_decrypt(&cipher, out, TCP_MAX_SIZE, in.data, in.len);
             puts("Aborting: decryption not yet implemented for non-aead ciphers");
             exit(100);
