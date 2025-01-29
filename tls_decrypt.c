@@ -13,6 +13,7 @@
  */
 
 #include "tls_decrypt.h"
+#include "log.h"
 #include "utils.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -44,19 +45,19 @@ int ssl_cipher_init(
     }
     err = gcry_cipher_open(cipher, algo, gcry_modes[mode], 0);
     if (err !=0) {
-        fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
+        tls_bf_logf(ERROR, "%s: %s", gcry_strsource(err), gcry_strerror(err));
         return  -1;
     }
     err = gcry_cipher_setkey(*(cipher), sk, gcry_cipher_get_algo_keylen (algo));
     if (err != 0) {
-        fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
+        tls_bf_logf(ERROR, "%s: %s", gcry_strsource(err), gcry_strerror(err));
         return -1;
     }
     /* AEAD cipher suites will set the nonce later. */
     if (mode == MODE_CBC) {
         err = gcry_cipher_setiv(*(cipher), iv, gcry_cipher_get_algo_blklen(algo));
         if (err != 0) {
-            fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
+            tls_bf_logf(ERROR, "%s: %s", gcry_strsource(err), gcry_strerror(err));
             return -1;
         }
     }
@@ -91,7 +92,6 @@ bool tls_decrypt_aead_record(
         ssl_cipher_mode_t mode,
         uint8_t ct, uint16_t record_version,
         bytearray iv,
-        bool ignore_mac_failed,
         const unsigned char *in, uint16_t inl,
         const unsigned char *cid, uint8_t cidl,
         bytearray *out)
@@ -131,15 +131,21 @@ bool tls_decrypt_aead_record(
         auth_tag_len = 8;
         break;
     default:
-        printf("%s unsupported cipher!\n", G_STRFUNC);
+        tls_bf_logf(ERROR, "in %s: %s unsupported cipher!", __func__);
         return false;
     }
 
     /* Parse input into explicit nonce (TLS 1.2 only), ciphertext and tag. */
     if (is_v12 && cipher_mode != MODE_POLY1305) {
         if (inl < EXPLICIT_NONCE_LEN + auth_tag_len) {
-            printf("input %d is too small for explicit nonce %d and auth tag %d\n",
-                    inl, EXPLICIT_NONCE_LEN, auth_tag_len);
+            tls_bf_logf(
+                ERROR,
+                "in %s: input %d is too small for explicit nonce %d and auth tag %d",
+                __func__,
+                inl,
+                EXPLICIT_NONCE_LEN,
+                auth_tag_len
+            );
             return false;
         }
         explicit_nonce = in;
@@ -147,13 +153,13 @@ bool tls_decrypt_aead_record(
         ciphertext_len = inl - EXPLICIT_NONCE_LEN - auth_tag_len;
     } else if (version == TLSV1DOT3_VERSION || version == DTLSV1DOT3_VERSION || cipher_mode == MODE_POLY1305) {
         if (inl < auth_tag_len) {
-            printf("input %d has no space for auth tag %d\n", inl, auth_tag_len);
+            tls_bf_logf(ERROR, "in %s: input %d has no space for auth tag %d", __func__, inl, auth_tag_len);
             return false;
         }
         ciphertext = in;
         ciphertext_len = inl - auth_tag_len;
     } else {
-        printf("Unexpected TLS version %#x\n", version);
+        tls_bf_logf(ERROR, "in %s: Unexpected TLS version %#x", __func__, version);
         return false;
     }
     auth_tag_wire = ciphertext + ciphertext_len;
@@ -164,12 +170,14 @@ bool tls_decrypt_aead_record(
      */
     if (is_v12 && cipher_mode != MODE_POLY1305) {
         DISSECTOR_ASSERT(iv.len == IMPLICIT_NONCE_LEN);
-        ///* Implicit (4) and explicit (8) part of nonce. */
+        /* Implicit (4) and explicit (8) part of nonce. */
         memcpy(nonce, iv.data, IMPLICIT_NONCE_LEN);
         memcpy(nonce + IMPLICIT_NONCE_LEN, explicit_nonce, EXPLICIT_NONCE_LEN);
 
     } else if (version == TLSV1DOT3_VERSION || version == DTLSV1DOT3_VERSION ||  cipher_mode == MODE_POLY1305) {
-        exit(9);
+        // TODO: implement
+        puts("Aborting: not yet implemented (lookup exit code in source)");
+        exit(101);
         /*
          * Technically the nonce length must be at least 8 bytes, but for
          * AES-GCM, AES-CCM and Poly1305-ChaCha20 the nonce length is exact 12.
@@ -179,19 +187,19 @@ bool tls_decrypt_aead_record(
         //memcpy(nonce, decoder->write_iv.data, decoder->write_iv.data_len);
         ///* Sequence number is left-padded with zeroes and XORed with write_iv */
         //phton64(nonce + nonce_len - 8, pntoh64(nonce + nonce_len - 8) ^ decoder->seq);
-        //printf("%s seq %llx\n", G_STRFUNC, decoder->seq);
+        //printf("%s seq %llx\n", __func__, decoder->seq);
     }
 
     /* Set nonce and additional authentication data */
     err = gcry_cipher_reset(*cipher);
     if (err != 0) {
-        fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
+        tls_bf_logf(ERROR, "in %s: %s: %s", __func__, gcry_strsource(err), gcry_strerror(err));
         return -1;
     }
-    //ssl_print_data("nonce", nonce, 12);
+    tls_bf_log_ssl_data(BF_DEBUG, "nonce", nonce, 12);
     err = gcry_cipher_setiv(decoder->evp, nonce, 12);
     if (err != 0) {
-        printf("%s failed to set nonce: %s\n", G_STRFUNC, gcry_strerror(err));
+        tls_bf_logf(ERROR, "in %s: Failed to set nonce: %s", __func__, gcry_strerror(err));
         return false;
     }
 
@@ -232,10 +240,11 @@ bool tls_decrypt_aead_record(
         aad[8] = ct;                        /* TLSCompressed.type */
         phton16(aad + 9, record_version);   /* TLSCompressed.version */
         phton16(aad + 11, ciphertext_len);  /* TLSCompressed.length */
-        //ssl_print_data("aad", aad, aad_len);
+        tls_bf_log_ssl_data(BF_DEBUG, "aad", aad, aad_len);
     } else if (version == DTLSV1DOT3_VERSION) {
-        // FIXME: not handling this for now
-        exit(10);
+        // TODO: implement
+        puts("Aborting: not yet implemented (lookup exit code in source)");
+        exit(102);
         //aad_len = decoder->dtls13_aad.data_len;
         //aad = decoder->dtls13_aad.data;
     } else if (draft_version >= 25 || draft_version == 0) {
@@ -252,16 +261,16 @@ bool tls_decrypt_aead_record(
 
         gcry_cipher_ctl(decoder->evp, GCRYCTL_SET_CCM_LENGTHS, lengths, sizeof(lengths));
         if (err != 0) {
-            fprintf(stderr, "%s: %s\n", gcry_strsource(err), gcry_strerror(err));
+            tls_bf_logf(ERROR, "in %s: %s: %s", __func__, gcry_strsource(err), gcry_strerror(err));
             return -1;
         }
     }
 
     if (aad && aad_len > 0) {
-        //ssl_print_data("AAD", aad, aad_len);
+        tls_bf_log_ssl_data(BF_DEBUG, "AAD", aad, aad_len);
         err = gcry_cipher_authenticate(decoder->evp, aad, aad_len);
         if (err) {
-            printf("%s failed to set AAD: %s\n", G_STRFUNC, gcry_strerror(err));
+            tls_bf_logf(ERROR, "in %s: Failed to set AAD: %s", __func__, gcry_strerror(err));
             return false;
         }
     }
@@ -269,49 +278,27 @@ bool tls_decrypt_aead_record(
     /* Decrypt now that nonce and AAD are set. */
     err = gcry_cipher_decrypt(decoder->evp, out->data, out->len, ciphertext, ciphertext_len);
     if (err) {
-        printf("%s decrypt failed: %s\n", G_STRFUNC, gcry_strerror(err));
+        tls_bf_logf(ERROR, "in %s: Decrypt failed: %s", __func__, gcry_strerror(err));
         return false;
     }
 
     /* Check authentication tag for authenticity (replaces MAC) */
     err = gcry_cipher_gettag(decoder->evp, auth_tag_calc, auth_tag_len);
     if (err == 0 && !memcmp(auth_tag_calc, auth_tag_wire, auth_tag_len)) {
-        ssl_print_data("auth_tag(OK)", auth_tag_calc, auth_tag_len);
+        tls_bf_log_ssl_data(INFO, "auth_tag(OK)", auth_tag_calc, auth_tag_len);
     } else {
         if (err) {
-            //printf("%s cannot obtain tag: %s\n", G_STRFUNC, gcry_strerror(err));
+            tls_bf_logf(BF_DEBUG, "in %s: Cannot obtain tag: %s", __func__, gcry_strerror(err));
         } else {
-            //printf("%s auth tag mismatch\n", G_STRFUNC);
-            //ssl_print_data("auth_tag(expect)", auth_tag_calc, auth_tag_len);
-            //ssl_print_data("auth_tag(actual)", (uint8_t *)auth_tag_wire, auth_tag_len);
+            tls_bf_logf(BF_DEBUG, "in %s: Auth tag mismatch", __func__);
+            tls_bf_log_ssl_data(BF_DEBUG, "\tauth_tag(calculated)", auth_tag_calc, auth_tag_len);
+            tls_bf_log_ssl_data(BF_DEBUG, "\tauth_tag(packet)    ", (uint8_t *)auth_tag_wire, auth_tag_len);
         }
-        if (ignore_mac_failed) {
-            printf("%s: auth check failed, but ignored for troubleshooting ;-)\n", G_STRFUNC);
-        } else {
-            return false;
-        }
+        return false;
     }
 
-    /*
-     * Increment the (implicit) sequence number for TLS 1.2/1.3 and TLCP 1.1. This is done
-     * after successful authentication to ensure that early data is skipped when
-     * CLIENT_EARLY_TRAFFIC_SECRET keys are unavailable.
-     */
-    if (version == TLSV1DOT2_VERSION || version == TLSV1DOT3_VERSION || version == TLCPV1_VERSION) {
-        // TODO: verify usefullness of this, as we are only looking at one packet
-        //decoder->seq++;
-    }
-
-    ssl_print_data("Plaintext", out->data, ciphertext_len);
+    tls_bf_log_ssl_data(INFO, "Plaintext", out->data, ciphertext_len);
     out->len = ciphertext_len;
     return true;
-}
-
-void ssl_print_data(const char *header, uint8_t *bytes, size_t byte_len) {
-  printf("%s: 0x", header);
-  for (size_t i = 0; i < byte_len; i++) {
-    printf("%02x", bytes[i]);
-  }
-  puts("");
 }
 

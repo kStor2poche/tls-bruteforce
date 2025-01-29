@@ -18,7 +18,7 @@ bytearray hexstr_to_bytearray(const char* hexstr)
     return bytes;
 }
 
-void print_bytearray_sub(char *name, bytearray b) {
+void _debug_bytearray(char *name, bytearray b) {
     printf("%s: .len = %lu, .data = ", name, b.len);
     for (size_t i = 0; i<b.len; i++) {
         printf("%02x", b.data[i]);
@@ -56,7 +56,7 @@ void print_port_list(port_list self) {
     puts("]");
 }
 
-void free_list(port_list self)
+void free_port_list(port_list self)
 {
     free(self.ports);
 }

@@ -12,25 +12,28 @@ endif
 
 default: clean build
 
+log: log.c log.h
+	${CC} ${CFLAGS} -c $< -o log.o
+
 utils: utils.c utils.h
 	${CC} ${CFLAGS} -c $< -o utils.o
 
 cipher_suite_extraction: cipher_suite_extraction.c cipher_suite_extraction.h
 	${CC} ${CFLAGS} -c $< -o cipher_suite_extraction.o
 
-info_digger: info_digger.c info_digger.h utils.o
+info_digger: info_digger.c info_digger.h utils.o log.o
 	${CC} ${CFLAGS} -c $< -o info_digger.o
 
-key_derivation: key_derivation.c key_derivation.h utils.o
+key_derivation: key_derivation.c key_derivation.h utils.o log.o
 	${CC} ${CFLAGS} -c $< -o key_derivation.o
 
-tls_decrypt: tls_decrypt.c tls_decrypt.h utils.o cipher_suite_extraction.o
+tls_decrypt: tls_decrypt.c tls_decrypt.h utils.o cipher_suite_extraction.o log.o
 	${CC} ${CFLAGS} -c $< -o tls_decrypt.o
 
-main: main.c tls_decrypt.o key_derivation.o utils.o info_digger.o cipher_suite_extraction.o
+main: main.c tls_decrypt.o key_derivation.o utils.o info_digger.o cipher_suite_extraction.o log.o
 	${CC} ${CFLAGS} -c $< -o main.o
 
-build: main.o tls_decrypt.o key_derivation.o utils.o info_digger.o cipher_suite_extraction.o
+build: main.o tls_decrypt.o key_derivation.o utils.o info_digger.o cipher_suite_extraction.o log.o
 	${CC} ${CFLAGS} $^ -o tls-bf ${LIBS}
 
 run: build

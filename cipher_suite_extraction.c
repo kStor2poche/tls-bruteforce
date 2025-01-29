@@ -8,7 +8,6 @@ const int get_cipher_suite_gcry_digest(const SslCipherSuite *cs) {
 }
 
 const int get_cipher_suite_g_mode(const SslCipherSuite *cs) {
-    printf("cs->modes : %d, ret : %d\n", cs->mode, gcry_modes[cs->mode]);
     return gcry_modes[cs->mode];
 }
 

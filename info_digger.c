@@ -1,4 +1,5 @@
 #include "info_digger.h"
+#include "log.h"
 #include "utils.h"
 #include <pcap/pcap.h>
 #include <stdbool.h>
@@ -12,17 +13,19 @@
 #include <netinet/tcp.h>
 #include <string.h>
 
+// Takes the `path` to a .pcap file and returns a `digger *` to dig information from this capture.
+// TODO: implement a free function (even if this leak is very minor).
 digger *digger_from_file(char* path) {
     digger *new_dig = malloc(sizeof(digger));
     pcap_init(PCAP_CHAR_ENC_LOCAL, new_dig->errbuf);
     if (new_dig->errbuf[0] != 0) {
-        fprintf(stderr, "Error: in %s: %s\n", __func__, new_dig->errbuf);
+        tls_bf_logf(ERROR, "in %s: %s", __func__, new_dig->errbuf);
         return NULL;
     }
 
     pcap_t* handle = pcap_open_offline(path, new_dig->errbuf);
     if (new_dig->errbuf[0] != 0) {
-        fprintf(stderr, "Error: in %s: %s\n", __func__, new_dig->errbuf);
+        tls_bf_logf(ERROR, "in %s: %s", __func__, new_dig->errbuf);
         return NULL;
     }
     new_dig->capture = handle;
@@ -68,19 +71,16 @@ static tls_actor has_tls_actor(short sport, short dport, port_list tls_ports) {
 }
 
 static void tls_record_debug_print(tls_record_hdr* record) {
-    if (getenv("TLS_BF_DEBUG") != NULL) {
-        printf("\nContent type: 0x%u\n", record->content_type);
-        printf("Version: 0x%04x\n", ntohs(record->ver));
-        printf("Length: 0x%04x\n", ntohs(record->len));
-    }
+    tls_bf_log(DEBUG, "Found record:");
+    tls_bf_logf(DEBUG, "Content type: 0x%u", record->content_type);
+    tls_bf_logf(DEBUG, "Version: 0x%04x", ntohs(record->ver));
+    tls_bf_logf(DEBUG, "Length: 0x%04x", ntohs(record->len));
 }
 
 static void tls_handshake_debug_print(tls_handshake_hdr* handshake) {
-    if (getenv("TLS_BF_DEBUG") != NULL) {
-        printf("\tMessage type: 0x%02x\n", handshake->msg_type);
-        printf("\tLength: 0x%06x\n", ntohl(handshake->len) >> 8);
-        printf("\tVersion: 0x%04x\n", ntohs(handshake->ver));
-    }
+    tls_bf_logf(DEBUG, "\tMessage type: 0x%02x", handshake->msg_type);
+    tls_bf_logf(DEBUG, "\tLength: 0x%06x", ntohl(handshake->len) >> 8);
+    tls_bf_logf(DEBUG, "\tVersion: 0x%04x", ntohs(handshake->ver));
 }
 
 static bool dig_complete(digger *self) {
@@ -128,14 +128,15 @@ static bool analyze_tls_record(digger* self, bytearray record_bytearray, tls_act
         record_bytearray.data += h_record_len + 5;
         analyze_tls_record(self, record_bytearray, actor);
     } else if (h_record_len + 5 > record_bytearray.len) {
-        puts("Warning: Current record is (smh) incomplete");
+        tls_bf_log(WARNING, "Found a (smh) incomplete record! (use debug logs for more detail)");
     }
 
     return dig_complete(self);
 }
 
-// Finds TLS version, algo, server random & first packet from capture (& tcp epoch for hmac ?)
-// TODO: maybe be less dumb and get this off of libwireshark (though epan initialisation looks like a huge hassle)
+// Find TLS version, algo, server random & first packet with digger.
+// TODO: maybe get this off of libwireshark (though epan initialisation looks like a huge hassle).
+// TODO: find tcp epoch for hmac based ciphers as well as other infos (cid ?) for cipher completeness.
 dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
     // variables for TCP app content reassembly
     bytearray last_app_data = (bytearray){.data = NULL, .len = 0};
@@ -149,21 +150,21 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
             case 1:
                 break;
             case PCAP_ERROR:
-                fprintf(stderr, "Error: in %s: %s\n", __func__, pcap_geterr(self->capture));
+                tls_bf_logf(ERROR, "in %s: %s", __func__, pcap_geterr(self->capture));
                 return DIG_PCAP_ERR;
             case PCAP_ERROR_BREAK:
-                puts("Info: ran out of packets to dig...");
+                tls_bf_log(INFO, "Ran out of packets to dig...");
                 return DIG_OUT_OF_PACKETS;
             case PCAP_ERROR_NOT_ACTIVATED:
-                fprintf(stderr, "Error: in %s: pcap handle missing activation\n", __func__);
+                tls_bf_logf(ERROR, "in %s: pcap handle missing activation", __func__);
                 return DIG_PCAP_ERR;
             default:
-                fprintf(stderr, "Error: in %s: unknown libpcap error (%d)\n", __func__, code);
+                tls_bf_logf(ERROR, "in %s: unknown libpcap error (%d)", __func__, code);
                 return DIG_PCAP_ERR;
         }
 
         if (self->cur_hdr->len != self->cur_hdr->caplen) {
-            fputs("Error: Found incomplete packet!! (bad capture ?)\n", stderr);
+            tls_bf_logf(ERROR, "in %s: Found incomplete packet!! (bad capture ?)", __func__);
             return DIG_INCOMPLETE_CAPTURE;
         }
 
@@ -184,18 +185,21 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
                 segment_hdr = packet_hdr + 0x28; // ipv6 has a fixed length header
                 break;
             default:
+                tls_bf_log(INFO, "Found unsupported (non ipv4 or ipv6) packet");
                 continue;
         }
 
         // TODO: handle dtls & quic, ideally through separate functions if that is possible
         if (proto != IPPROTO_TCP) {
+            tls_bf_log(INFO, "Found unsupported (non tcp) segment");
             continue;
         }
 
         struct tcphdr* tcp_hdr = (struct tcphdr *)segment_hdr;
-        uint8_t tcp_hdr_len = tcp_hdr->doff * 4;
-        if (tcp_hdr_len >= (self->cur_packet + self->cur_hdr->caplen - segment_hdr)
-                || self->cur_hdr->caplen == 60) { // caplen = 60 indicates empty tcp w/ eth padding
+        uint32_t tcp_hdr_len = tcp_hdr->doff * 4;
+        uint32_t tcp_len = self->cur_packet + self->cur_hdr->caplen - segment_hdr;
+        if (tcp_hdr_len >= tcp_len
+                || self->cur_hdr->caplen == 60) { // caplen = 60 is most likely empty tcp w/ eth padding
             continue;
         }
 
@@ -205,23 +209,23 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
             continue;
         }
 
-        // TCP "fragmentation" handling
+        // Application data reassembly
         size_t data_len = self->cur_packet + self->cur_hdr->caplen - segment_hdr - tcp_hdr_len;
         cur_ack = tcp_hdr->ack_seq;
 
         if (cur_ack != last_ack) {
-            // time to analyze reassembled packet...
+            // time to analyze reassembled data...
             if (last_app_data.data != NULL) {
                 if (analyze_tls_record(self, last_app_data, last_actor)) {
                     return DIG_SUCCESS;
                 };
             }
 
-            // ...and pave the way for new ones
+            // ...and pave the way for new data
             void *ret = realloc(last_app_data.data, data_len);
             
             if (ret == NULL) {
-                fputs("Error: no more memory left for realloc call, horrible things might be happening\n", stderr);
+                tls_bf_log(ERROR, "No more memory left for realloc call, horrible things might be happening");
                 return DIG_REALLOC_FAILURE;
             }
             last_app_data.data = ret;
@@ -233,7 +237,7 @@ dig_ret dig_dig_deep_deep(digger *self, port_list tls_ports) {
             void *ret = realloc(last_app_data.data, data_len + last_app_data.len);
 
             if (ret == NULL) {
-                fputs("Error: no more memory left for realloc call, horrible things might be happening\n", stderr);
+                tls_bf_log(ERROR, "No more memory left for realloc call, horrible things might be happening");
                 return DIG_REALLOC_FAILURE;
             }
             last_app_data.data = ret;

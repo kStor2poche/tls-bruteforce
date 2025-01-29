@@ -16,9 +16,7 @@ typedef struct _bytearray{
 // https://gist.github.com/xsleonard/7341172
 bytearray hexstr_to_bytearray(const char* hexstr);
 
-void print_bytearray_sub(char *name, bytearray b);
-
-#define print_bytearray(b) print_bytearray_sub(#b, b)
+void _debug_bytearray(char *name, bytearray b);
 
 /**--
    port list   
@@ -32,6 +30,6 @@ port_list parse_port_list(char* ports_str);
 
 void print_port_list(port_list self);
 
-void free_list(port_list self);
+void free_port_list(port_list self);
 
 #endif
