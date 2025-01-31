@@ -1,2 +1,2 @@
-# tls-bruteforce
-A TLS decryption bruteforcer. WIP.
+# TLS-Bruteforce
+A TLS decryption bruteforcer relying on libpcap and libgcrypt. WIP.
