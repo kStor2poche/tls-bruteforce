@@ -24,17 +24,21 @@ int main(int argc, char **argv) {
     bytearray client_random = hexstr_to_bytearray(argv[1]);
     FILE *key_list_file = fopen(argv[2], "r");
     if (key_list_file == NULL) {
-        tls_bf_log(ERROR, "Key list file not found\n");
+        tls_bf_log(ERROR, "Key list file not found.");
         exit(2);
     }
 
     digger *dig = digger_from_file(argv[3]);
+    if (dig == NULL) {
+        tls_bf_log(ERROR, "Couldn't retrieve digger from file. See message(s) above for context.");
+        exit(3);
+    }
     port_list tls_ports = parse_port_list(argv[4]);
     dig_ret res = dig_dig_deep_deep(dig, tls_ports);
     free_port_list(tls_ports);
     if (res != DIG_SUCCESS) {
-        tls_bf_log(ERROR, "Information dig failed\n");
-        exit(3);
+        tls_bf_log(ERROR, "Information dig failed. See message(s) above for context.");
+        exit(4);
     }
     dug_data data = dig->dug_data;
 
@@ -53,7 +57,7 @@ int main(int argc, char **argv) {
     int hash_algo = get_cipher_suite_gcry_digest(&cipher_suite);
     if (mode == -1 || cipher_algo == 0 || hash_algo == -1) {
         tls_bf_log(ERROR, "Extracted cipher suite is unusable (use info logs for more detail)");
-        exit(4);
+        exit(5);
     }
 
 
@@ -62,7 +66,7 @@ int main(int argc, char **argv) {
     while(true) {
         if (fread(&cur_key, sizeof(char), sizeof(cur_key) - 1, key_list_file) != sizeof(cur_key) - 1) {
             puts("Keys exhausted");
-            exit(5);
+            exit(6);
         };
         cur_key[96] = 0;
 
@@ -85,7 +89,7 @@ int main(int argc, char **argv) {
         gcry_cipher_hd_t cipher;
         if (ssl_cipher_init(&cipher, cipher_algo, key.data, iv.data, mode) < 0) {
             tls_bf_log(ERROR, "ssl_cipher failed. See message(s) above for context.");
-            exit(6);
+            exit(7);
         };
 
         bytearray in = data.first_app_data;
