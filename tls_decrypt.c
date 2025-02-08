@@ -178,19 +178,15 @@ bool tls_decrypt_aead_record(
         memcpy(nonce + IMPLICIT_NONCE_LEN, explicit_nonce, EXPLICIT_NONCE_LEN);
 
     } else if (version == TLSV1DOT3_VERSION || version == DTLSV1DOT3_VERSION ||  cipher_mode == MODE_POLY1305) {
-        // TODO: implement
-        puts("Aborting: not yet implemented (lookup exit code in source)");
-        exit(101);
         /*
          * Technically the nonce length must be at least 8 bytes, but for
          * AES-GCM, AES-CCM and Poly1305-ChaCha20 the nonce length is exact 12.
          */
-        //const unsigned nonce_len = 12;
-        //DISSECTOR_ASSERT(decoder->write_iv.data_len == nonce_len);
-        //memcpy(nonce, decoder->write_iv.data, decoder->write_iv.data_len);
-        ///* Sequence number is left-padded with zeroes and XORed with write_iv */
-        //phton64(nonce + nonce_len - 8, pntoh64(nonce + nonce_len - 8) ^ decoder->seq);
-        //printf("%s seq %llx\n", __func__, decoder->seq);
+        const unsigned nonce_len = 12;
+        DISSECTOR_ASSERT(iv.len == nonce_len);
+        memcpy(nonce, iv.data, iv.len);
+        /* Sequence number is left-padded with zeroes and XORed with write_iv */
+        phton64(nonce + nonce_len - 8, pntoh64(nonce + nonce_len - 8) ^ decoder->seq);
     }
 
     /* Set nonce and additional authentication data */
@@ -208,7 +204,7 @@ bool tls_decrypt_aead_record(
 
     /* (D)TLS 1.2 needs specific AAD, TLS 1.3 (before -25) uses empty AAD. */
     if (is_cid) { /* if connection ID */
-        // TODO: restore functionnality
+        // TODO: restore functionnality ? Though that is related to DTLS 1.2, which we might not care about really much
         //if (ssl->session.deprecated_cid) {
         if (false) {
             aad_len = 14 + cidl;
@@ -245,7 +241,7 @@ bool tls_decrypt_aead_record(
         phton16(aad + 11, ciphertext_len);  /* TLSCompressed.length */
         tls_bf_log_ssl_data(BF_DEBUG, "aad", aad, aad_len);
     } else if (version == DTLSV1DOT3_VERSION) {
-        // TODO: implement
+        // TODO: implement (though it seems that x-ray-tls-itself doesn't support DTLS in the first place)
         puts("Aborting: not yet implemented (lookup exit code in source)");
         exit(102);
         //aad_len = decoder->dtls13_aad.data_len;
